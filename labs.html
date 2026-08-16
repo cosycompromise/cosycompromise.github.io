@@ -1,0 +1,1007 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Lab Notebook — Malware Analysis Cottage</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@500;600;700&family=Nunito:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --cream: #fdf3f7;
+    --cream-2: #f9e4ef;
+    --brown: #532b45;
+    --brown-soft: #855b78;
+    --pink: #f0bfe0;
+    --pink-deep: #b8298f;
+    --sage: #d1b6dd;
+    --sage-deep: #8a4fa0;
+    --butter: #f6d9ab;
+    --butter-deep: #c9944a;
+    --card: #fffafc;
+    --shadow: 0 6px 18px rgba(83, 43, 69, 0.09);
+    --danger: #d97a6b;
+    --danger-bg: #fbe2dc;
+  }
+
+  * { box-sizing: border-box; }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    margin: 0;
+    font-family: 'Nunito', sans-serif;
+    background: var(--cream);
+    color: var(--brown);
+    line-height: 1.7;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+  }
+
+  h1, h2, h3, .brand {
+    font-family: 'Quicksand', sans-serif;
+    font-weight: 700;
+  }
+
+  a { color: var(--sage-deep); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  .wrap { max-width: 920px; margin: 0 auto; padding: 0 24px; }
+
+  nav {
+    position: sticky;
+    top: 0;
+    background: rgba(253, 243, 247, 0.92);
+    backdrop-filter: blur(6px);
+    border-bottom: 1px solid rgba(83,43,69,0.08);
+    z-index: 10;
+  }
+  nav .wrap {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 24px;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  .brand { font-size: 20px; color: var(--brown); }
+  .brand span { color: var(--pink-deep); }
+  .back-link {
+    background: var(--card);
+    border: 1px solid rgba(83,43,69,0.1);
+    border-radius: 999px;
+    padding: 7px 16px;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--brown-soft);
+  }
+  .back-link:hover { background: var(--pink); color: var(--brown); text-decoration: none; }
+
+  header.hero { text-align: center; padding: 56px 24px 36px; }
+  header.hero h1 { font-size: 32px; margin: 0 0 10px; }
+  header.hero p { font-size: 16px; color: var(--brown-soft); max-width: 560px; margin: 0 auto; }
+
+  section { padding: 8px 24px 40px; }
+
+  /* ---------- shared lab environment block ---------- */
+  .env-section {
+    background: var(--card);
+    border-radius: 18px;
+    box-shadow: var(--shadow);
+    border: 1px solid rgba(83,43,69,0.06);
+    padding: 20px 24px;
+    margin-bottom: 22px;
+  }
+  .env-section h2 {
+    margin: 0 0 4px;
+    font-size: 16px;
+  }
+  .env-section .env-sub {
+    margin: 0 0 14px;
+    font-size: 13px;
+    color: var(--brown-soft);
+  }
+
+  /* ---------- filter / search bar ---------- */
+  .controls {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    align-items: center;
+    margin-bottom: 22px;
+    background: var(--card);
+    border-radius: 16px;
+    padding: 14px 16px;
+    box-shadow: var(--shadow);
+    border: 1px solid rgba(83,43,69,0.06);
+  }
+  .controls input[type="text"] {
+    flex: 1 1 200px;
+    min-width: 140px;
+    font-family: 'Nunito', sans-serif;
+    font-size: 14px;
+    padding: 9px 14px;
+    border-radius: 999px;
+    border: 1px solid rgba(83,43,69,0.15);
+    background: var(--cream);
+    color: var(--brown);
+  }
+  .controls select {
+    font-family: 'Nunito', sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    padding: 8px 12px;
+    border-radius: 999px;
+    border: 1px solid rgba(83,43,69,0.15);
+    background: var(--cream);
+    color: var(--brown-soft);
+  }
+  .controls .result-count { font-size: 12.5px; color: var(--brown-soft); white-space: nowrap; }
+
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    font-size: 12px;
+    font-weight: 700;
+    padding: 4px 11px;
+    border-radius: 999px;
+    margin: 2px 4px 2px 0;
+  }
+  .chip.pink { background: var(--pink); color: var(--pink-deep); }
+  .chip.sage { background: var(--sage); color: var(--sage-deep); }
+  .chip.butter { background: var(--butter); color: var(--butter-deep); }
+  .chip.neutral { background: var(--cream-2); color: var(--brown-soft); font-weight: 600; }
+  .chip.mono { font-family: monospace; font-weight: 600; }
+  .chip.tag-btn { cursor: pointer; border: none; }
+
+  details.lab-card {
+    background: var(--card);
+    border-radius: 18px;
+    box-shadow: var(--shadow);
+    border: 1px solid rgba(83,43,69,0.06);
+    margin-bottom: 18px;
+    overflow: hidden;
+    scroll-margin-top: 84px;
+  }
+  details.lab-card.is-target { border-color: var(--sage-deep); box-shadow: 0 0 0 2px var(--sage-deep), var(--shadow); }
+  details.lab-card summary {
+    cursor: pointer;
+    list-style: none;
+    padding: 20px 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    position: relative;
+  }
+  details.lab-card summary::-webkit-details-marker { display: none; }
+  details.lab-card summary::after {
+    content: "+";
+    position: absolute;
+    top: 18px;
+    right: 24px;
+    color: var(--sage-deep);
+    font-size: 20px;
+  }
+  details.lab-card[open] summary::after { content: "–"; }
+  .lab-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 30px; }
+  .lab-title { margin: 0; font-size: 18px; padding-right: 20px; }
+  .lab-date-col { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; flex-shrink: 0; }
+  .lab-date { font-size: 12px; color: var(--brown-soft); white-space: nowrap; }
+  .lab-summary { margin: 0; font-size: 14px; color: var(--brown-soft); }
+  .lab-body { padding: 0 24px 26px; }
+
+  .section-label {
+    font-family: 'Quicksand', sans-serif;
+    font-weight: 700;
+    font-size: 13px;
+    color: var(--brown-soft);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin: 22px 0 10px;
+  }
+  .section-label:first-child { margin-top: 4px; }
+
+  .safety-banner {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    background: var(--danger-bg);
+    color: #8a4436;
+    border-radius: 12px;
+    padding: 12px 16px;
+    font-size: 13.5px;
+    margin: 4px 0 18px;
+  }
+  .safety-banner .icon { flex-shrink: 0; }
+
+  .env-note-banner {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    background: var(--cream-2);
+    color: var(--brown-soft);
+    border-radius: 12px;
+    padding: 10px 16px;
+    font-size: 13px;
+    margin: 4px 0 18px;
+    border: 1px dashed var(--sage-deep);
+  }
+
+  .meta-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px 20px;
+    font-size: 13px;
+    color: var(--brown-soft);
+  }
+  .meta-grid div { word-break: break-all; }
+  .meta-grid strong { color: var(--brown); font-weight: 700; }
+  @media (max-width: 640px) { .meta-grid { grid-template-columns: 1fr; } }
+
+  .prereq-list, .ref-list {
+    margin: 0;
+    padding-left: 20px;
+    font-size: 13.5px;
+    color: var(--brown-soft);
+  }
+  .prereq-list li, .ref-list li { margin-bottom: 4px; }
+
+  .env-box {
+    background: var(--cream-2);
+    border-radius: 14px;
+    padding: 14px 18px;
+    border: 1px dashed var(--sage-deep);
+    font-size: 13px;
+    color: var(--brown-soft);
+  }
+  .env-box .env-row { margin-bottom: 6px; }
+  .env-box .env-row:last-child { margin-bottom: 0; }
+  .env-box strong { color: var(--brown); }
+
+  .step-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 16px; }
+  .step-item { display: flex; gap: 14px; align-items: flex-start; }
+  .step-num {
+    flex-shrink: 0;
+    width: 28px; height: 28px;
+    border-radius: 50%;
+    background: var(--sage);
+    color: var(--sage-deep);
+    font-weight: 700;
+    font-size: 13px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-top: 2px;
+  }
+  .step-text { flex: 1; min-width: 0; }
+  .step-text-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 4px; }
+  .step-text h4 { margin: 0; font-size: 14.5px; }
+  .step-text p { margin: 0 0 4px; font-size: 14px; color: var(--brown-soft); }
+  .step-text p.observation-label { font-weight: 700; color: var(--brown); font-size: 12.5px; margin: 8px 0 2px; }
+  .step-detail-list { margin: 4px 0 8px; padding-left: 18px; font-size: 13.5px; color: var(--brown-soft); }
+  .step-detail-list li { margin-bottom: 3px; }
+  .step-warning {
+    display: flex;
+    gap: 8px;
+    background: var(--danger-bg);
+    color: #8a4436;
+    border-radius: 8px;
+    padding: 8px 12px;
+    font-size: 13px;
+    margin: 6px 0;
+  }
+  .step-artifacts {
+    font-size: 12.5px;
+    color: var(--brown-soft);
+    margin: 4px 0 0;
+  }
+  .step-artifacts strong { color: var(--brown); }
+
+  .findings-row { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+  .finding-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    padding: 4px 10px 4px 4px;
+    border-radius: 999px;
+    background: var(--cream-2);
+    cursor: default;
+  }
+  .finding-chip .finding-type-tag {
+    font-family: 'Quicksand', sans-serif;
+    font-weight: 700;
+    font-size: 9.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    padding: 2px 7px;
+    border-radius: 999px;
+  }
+  .finding-chip .finding-value {
+    font-family: monospace;
+    font-size: 12px;
+    color: var(--brown);
+    word-break: break-all;
+  }
+  .finding-chip.has-note { border-bottom: 1px dashed var(--brown-soft); }
+  .finding-type-tag.import { background: var(--pink); color: var(--pink-deep); }
+  .finding-type-tag.string { background: var(--butter); color: var(--butter-deep); }
+  .finding-type-tag.url { background: var(--sage); color: var(--sage-deep); }
+  .finding-type-tag.file { background: #e5ddd3; color: var(--brown-soft); }
+  .finding-type-tag.registry { background: #e5ddd3; color: var(--brown-soft); }
+  .finding-type-tag.mutex { background: #e5ddd3; color: var(--brown-soft); }
+  .finding-type-tag.other { background: #e5ddd3; color: var(--brown-soft); }
+
+  .code-block-wrap { position: relative; margin: 6px 0 8px; }
+  .code-block-label {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--brown-soft);
+    margin-bottom: 3px;
+  }
+  .code-block {
+    background: #2f2a25;
+    color: #f3dfa3;
+    font-family: monospace;
+    font-size: 12.5px;
+    padding: 10px 14px;
+    padding-right: 62px;
+    border-radius: 10px;
+    overflow-x: auto;
+    white-space: pre;
+    line-height: 1.5;
+  }
+  .code-block.output-block { color: #cfe8c8; background: #262b26; }
+  .copy-btn {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    background: var(--butter);
+    color: #4a3a1f;
+    border: 1px solid rgba(0,0,0,0.1);
+    border-radius: 6px;
+    font-size: 11px;
+    font-family: 'Nunito', sans-serif;
+    font-weight: 700;
+    padding: 3px 8px;
+    cursor: pointer;
+  }
+  .copy-btn:hover { background: var(--butter-deep); color: #fff; }
+  .copy-btn.copied { background: var(--sage-deep); color: #fff; border-color: var(--sage-deep); }
+
+  .mitre-list { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip.mitre { background: var(--pink); color: var(--pink-deep); }
+
+  .ioc-box {
+    background: var(--cream-2);
+    border-radius: 10px;
+    padding: 10px 14px;
+    font-family: monospace;
+    font-size: 12.5px;
+    color: var(--brown-soft);
+    word-break: break-all;
+    line-height: 1.6;
+  }
+
+  .conclusion-box {
+    background: var(--cream-2);
+    border-radius: 14px;
+    padding: 14px 18px;
+    border-left: 4px solid var(--butter-deep);
+    border-radius: 0 14px 14px 0;
+    font-size: 14px;
+    color: var(--brown-soft);
+  }
+
+  .lab-empty { color: var(--brown-soft); font-size: 14px; text-align: center; padding: 30px 0; }
+
+  footer {
+    text-align: center;
+    padding: 40px 24px 56px;
+    color: var(--brown-soft);
+    font-size: 14px;
+  }
+  footer .heart { color: var(--pink-deep); }
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="wrap">
+    <div class="brand">the malware analysis <span>cottage</span></div>
+    <a class="back-link" href="index.html">← back to the cottage</a>
+  </div>
+</nav>
+
+<header class="hero">
+  <div class="wrap">
+    <h1>🧪 The lab notebook</h1>
+    <p>Detailed, replicable case files from samples analysed in my own isolated virtual machines — exact steps and what to expect at each one.</p>
+  </div>
+</header>
+
+<section id="labs">
+  <div class="wrap">
+    <div class="env-section" id="env-section">
+      <!-- filled in by renderDefaultEnvironment() -->
+    </div>
+
+    <div class="safety-banner" id="global-safety-banner">
+      <span class="icon">🛡️</span>
+      <span>Every sample on this page was detonated only inside an isolated, snapshotted VM with no direct internet access — network calls were answered by INetSim on a separate host-only gateway, never the real internet. The VM was reverted to a clean snapshot before and after each run.</span>
+    </div>
+
+    <div class="controls">
+      <input type="text" id="search-input" placeholder="Search title, tags, IOCs, tools…">
+      <select id="verdict-filter">
+        <option value="">All verdicts</option>
+        <option value="malicious">Malicious</option>
+        <option value="suspicious">Suspicious</option>
+        <option value="benign">Benign</option>
+      </select>
+      <select id="tag-filter">
+        <option value="">All tags</option>
+      </select>
+      <span class="result-count" id="result-count"></span>
+    </div>
+    <div id="lab-list"></div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    made with <span class="heart">♥</span> for curious analysts everywhere — stay cosy, stay careful
+  </div>
+</footer>
+
+<script>
+/*
+  HOW TO ADD A NEW CASE FILE
+  --------------------------
+  Copy one of the objects in the "labs" array below (everything between
+  the outer { and the matching }), paste it above "];", and fill in your
+  own details. New entries show up at the top if you paste them first.
+
+  The goal of this template is REPLICABILITY — someone with the same
+  sample and a similar VM setup should be able to follow your steps,
+  know exactly what output to expect, and land on the same conclusion.
+  Every field below is optional except title/date/verdict/summary/steps —
+  fill in as much as you have; empty fields are simply omitted from the
+  rendered card.
+
+  NOTE ON ENVIRONMENT: your lab setup usually doesn't change between
+  cases, so it's no longer repeated on every card. Edit the single
+  "defaultEnvironment" object below once and it applies to every case.
+  If a specific case used something different (a different VM, an extra
+  tool, no INetSim, etc), set that case's optional "environmentNote" —
+  a short plain-text string — and it'll show as a small callout on just
+  that card instead of duplicating the whole environment block.
+
+  Top-level fields:
+    id          - optional url-safe slug for deep-linking (e.g. "case-002").
+                  If omitted, one is auto-generated from the title.
+    title       - short case name, e.g. "Case #003: The fake invoice"
+    date        - any text, e.g. "12 Aug 2026"
+    verdict     - one of: "malicious", "suspicious", "benign"
+    difficulty  - optional, one of: "beginner", "intermediate", "advanced"
+    duration    - optional estimate, e.g. "~45 minutes"
+    tags        - short labels, e.g. ["Windows", "PE32", "dropper"]
+    summary     - one or two sentences shown before you expand the card
+    safetyNotes - optional. Use only for something UNUSUAL about this
+                  specific case beyond the general safety practice
+                  already stated in the banner at the top of the page
+                  (e.g. "this sample beacons out within seconds — confirm
+                  INetSim is up before double-clicking"). Rendered as a
+                  highlighted banner at the top of the expanded card.
+    environmentNote - optional short string for when THIS case deviated
+                  from defaultEnvironment (see note above)
+    prerequisites - optional array of strings: things you need before
+                  starting (tool installs, sample acquisition, VM image).
+    references  - optional array of { label, url } — write-ups, vendor
+                  reports, or tool docs you used or would point others to.
+
+  sample - metadata about the file itself:
+    fileType         - e.g. "PE32 executable (Windows)"
+    fileSize         - e.g. "184 KB"
+    md5, sha1, sha256 - hashes (leave "" if you don't have one)
+    deliveryVector   - how you obtained/received it, e.g. "email attachment"
+    acquisitionNotes - optional: where/how a replicator could get an
+                  equivalent sample, without hosting the file yourself
+
+  steps - an ordered array of step objects:
+    phase       - a short stage label, e.g. "Triage", "Static analysis",
+                  "Dynamic analysis", "Verdict"
+    title       - what this step is, e.g. "Check imports and strings"
+    detail      - optional array of extra bullet points/sub-steps that
+                  add granularity beyond the one-line title
+    commands    - array of exact commands/actions run (optional, use []
+                  if the step was manual/GUI-only) — this is what makes
+                  the step replicable
+    expectedOutput - optional string: the literal (or representative)
+                  output/behaviour a replicator should see after running
+                  the commands, shown in its own block
+    findings    - optional array for when a step turns up MULTIPLE
+                  discrete suspicious items (imports, strings, URLs,
+                  registry keys, mutexes, etc) that don't belong crammed
+                  into one observation paragraph. Each entry is:
+                    { type: "import" | "string" | "url" | "file" |
+                             "registry" | "mutex" | "other",
+                      value: "the exact string/import/path/etc",
+                      note: "optional one-line why it matters" }
+                  Rendered as a row of small horizontal chips under the
+                  step (type tag + monospace value); hover a chip to see
+                  its note as a tooltip if one is given. Use this
+                  whenever there's more than one item — one-off findings
+                  can still just go in "observation".
+    warning     - optional caution specific to this step
+    artifacts   - optional array of strings noting what to save at this
+                  step (e.g. "screenshot of Process Monitor filter",
+                  "export pcap as case002-run1.pcapng")
+    observation - what you actually saw/found when you did this
+
+  mitre - optional array of { id, name } ATT&CK technique mappings,
+          e.g. { id: "T1566.001", name: "Phishing: Spearphishing Attachment" }
+
+  iocs       - optional array of strings (hashes, IPs, domains — keep
+               network IOCs defanged, e.g. hxxp://, 185.203.xx.xx)
+  conclusion - closing notes: final verdict reasoning, remediation, what
+               you'd do differently next time.
+*/
+
+// Edit this once — it applies to every case below unless a case sets
+// its own "environmentNote" to flag a deviation.
+const defaultEnvironment = {
+  os: "Windows 10 22H2, isolated VirtualBox VM, snapshot reverted before every run",
+  vmSpecs: "4 vCPU, 8GB RAM, 60GB thin-provisioned disk",
+  tools: ["PEStudio 9.63", "Detect It Easy 3.09", "Process Monitor / Process Explorer (Sysinternals)", "Wireshark 4.2", "INetSim 1.3.2 on a separate host-only gateway VM"],
+  network: "Host-only network only, no internet. INetSim faked DNS and HTTP responses on the gateway VM."
+};
+
+const labs = [
+  {
+    title: "Case #001: .NET malware",
+    date: "13 Aug 2026",
+    verdict: "malicious",
+    tags: ["Windows", "PE32", ".NET"],
+    summary: ".NET malware compiled with VB.NET that does bad things.",
+    environmentNote: "Analysed in FlareVM rather than the default VirtualBox build; HashMyFiles was used alongside sha256sum for hashing, and Wireshark/INetSim weren't part of this particular run.",
+    sample: {
+      fileType: "PE32 executable (Windows, GUI)",
+      fileSize: "484 KB",
+      md5: "dc4200ac514006f084ead7f83b84c928",
+      sha1: "52e8f04d6b495d238f1a49283a10e2acc053123b",
+      sha256: "a850de0705c0f6095910aa1d5ed0e73a49581aa7427fcfaf2ff5144e93b047c1",
+      deliveryVector: "Unknown"
+    },
+    steps: [
+      {
+        phase: "Triage",
+        title: "Use HashMyFiles or sha256sum to get a hash, do a hash lookup and first look",
+        commands: ["sha256sum netmalware.exe", "# paste hash into VirusTotal"],
+        observation: "61/70 AV engines flagged it as malicious on VirusTotal. PEStudio showed the icon mismatched the real Adobe Reader icon and the binary had no digital signature."
+      },
+      {
+        phase: "Static analysis",
+        title: "Strings, imports and packing check",
+        commands: ["die netmalware.exe", "strings -n 8 netmalware.exe | grep -i http"],
+        findings: [
+          { type: "url", value: "hxxp://ziraat-helpdesk[.]com/components/com_content/limpopapa/" },
+          { type: "string", value: "keylogger" },
+          { type: "import", value: "SetWindowsHookEx", note: "used to install a low-level input hook" },
+          { type: "import", value: "GetForegroundWindow", note: "commonly used to log which window keystrokes belong to" }
+        ],
+        observation: "Detect It Easy showed the .text section was packed with high entropy of 7.9. Strings and imports (tabulated above) plus multiple references to browsers, usernames and passwords are all signs of a keylogger / infostealer."
+      },
+      {
+        phase: "Dynamic analysis",
+        title: "Detonate with network simulated",
+        commands: ["# snapshot the VM, then run:", "invoice_08234.pdf.exe", "# observe with Process Monitor + Wireshark running"],
+        observation: "Process Monitor showed a file written to %TEMP%\\svc_update.exe within 4 seconds of execution. Wireshark captured an HTTP GET to the hardcoded URL, answered by INetSim, followed by the process launching the dropped file."
+      },
+      {
+        phase: "Verdict",
+        title: "Classify and contain",
+        commands: [],
+        observation: "Confirmed downloader/dropper behaviour matching a generic PE downloader pattern. No legitimate reason for the observed network call or dropped executable."
+      }
+    ],
+    mitre: [
+      { id: "T1566.001", name: "Phishing: Spearphishing Attachment" },
+      { id: "T1105", name: "Ingress Tool Transfer" },
+      { id: "T1204.002", name: "User Execution: Malicious File" }
+    ],
+    iocs: [
+      "hxxp://185.203.xx.xx/update.bin (defanged)",
+      "SHA-256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b85",
+      "Dropped file: %TEMP%\\svc_update.exe",
+      "ziraat_limpi.exe, Important.exe"
+    ],
+    conclusion: "Blocked the C2 domain and hash at the email gateway, and wrote a YARA rule on the import combination (URLDownloadToFileA + WinExec + missing signature). Next time I'd also check the PDF icon resource directly rather than relying on visual comparison."
+  },
+  {
+    title: "Example #002: The invoice that wasn't",
+    date: "3 Aug 2026",
+    verdict: "malicious",
+    tags: ["Windows", "PE32", "phishing attachment"],
+    summary: "A .exe disguised as a PDF invoice, delivered by email. Turned out to be a small downloader fetching a second-stage payload.",
+    environmentNote: "Also used Ghidra 11.1 for a closer look at the downloader routine, on top of the default toolset.",
+    sample: {
+      fileType: "PE32 executable (Windows, GUI)",
+      fileSize: "184 KB",
+      md5: "5f4dcc3b5aa765d61d8327deb882cf99",
+      sha1: "2fd4e1c67a2d28fced849ee1bb76e7391b93eb12",
+      sha256: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b85",
+      deliveryVector: "Email attachment named invoice_08234.pdf.exe"
+    },
+    steps: [
+      {
+        phase: "Triage",
+        title: "Hash lookup and first look",
+        commands: ["sha256sum invoice_08234.pdf.exe", "# paste hash into VirusTotal"],
+        observation: "32/70 AV engines flagged it as malicious. PEStudio showed the icon mismatched the real Adobe Reader icon and the binary had no digital signature."
+      },
+      {
+        phase: "Static analysis",
+        title: "Strings, imports and packing check",
+        commands: ["diec invoice_08234.pdf.exe", "strings -n 8 invoice_08234.pdf.exe | grep -i http"],
+        findings: [
+          { type: "import", value: "URLDownloadToFileA", note: "fetches the second-stage payload over HTTP" },
+          { type: "import", value: "WinExec", note: "launches the dropped file after download" },
+          { type: "import", value: "CreateProcessA" },
+          { type: "url", value: "hxxp://185.203.xx.xx/update.bin" }
+        ],
+        observation: "Detect It Easy showed no known packer, but entropy on one section was elevated (~7.1). Strings and imports (tabulated above) point to downloader behaviour."
+      },
+      {
+        phase: "Dynamic analysis",
+        title: "Detonate with network simulated",
+        commands: ["# snapshot the VM, then run:", "invoice_08234.pdf.exe", "# observe with Process Monitor + Wireshark running"],
+        observation: "Process Monitor showed a file written to %TEMP%\\svc_update.exe within 4 seconds of execution. Wireshark captured an HTTP GET to the hardcoded URL, answered by INetSim, followed by the process launching the dropped file."
+      },
+      {
+        phase: "Verdict",
+        title: "Classify and contain",
+        commands: [],
+        observation: "Confirmed downloader/dropper behaviour matching a generic PE downloader pattern. No legitimate reason for the observed network call or dropped executable."
+      }
+    ],
+    mitre: [
+      { id: "T1566.001", name: "Phishing: Spearphishing Attachment" },
+      { id: "T1105", name: "Ingress Tool Transfer" },
+      { id: "T1204.002", name: "User Execution: Malicious File" }
+    ],
+    iocs: [
+      "hxxp://185.203.xx.xx/update.bin (defanged)",
+      "SHA-256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b85",
+      "Dropped file: %TEMP%\\svc_update.exe"
+    ],
+    conclusion: "Blocked the C2 domain and hash at the email gateway, and wrote a YARA rule on the import combination (URLDownloadToFileA + WinExec + missing signature). Next time I'd also check the PDF icon resource directly rather than relying on visual comparison."
+  },
+  {
+    title: "Example #001: A quiet little macro",
+    date: "20 Jul 2026",
+    verdict: "suspicious",
+    tags: ["Office", "macro", "VBA"],
+    summary: "A Word document with an auto-executing macro. Behaviour pointed at a dropper, but the second-stage payload never landed during analysis.",
+    environmentNote: "Swapped the default toolset for oletools (olevba) and CyberChef for this one, since it's an Office macro rather than a PE binary. INetSim had no HTTP handler configured for the observed domain, so the request failed to resolve fully.",
+    sample: {
+      fileType: "Microsoft Word document (.docm)",
+      fileSize: "58 KB",
+      md5: "",
+      sha1: "",
+      sha256: "",
+      deliveryVector: "Shared internally as a 'candidate CV' test file"
+    },
+    steps: [
+      {
+        phase: "Triage",
+        title: "Metadata-only inspection",
+        commands: ["olevba --no-deobfuscate candidate_cv.docm"],
+        observation: "AutoOpen and Shell function references were flagged, plus a suspicious level of string concatenation inside the macro module."
+      },
+      {
+        phase: "Static analysis",
+        title: "Deobfuscate the VBA",
+        commands: ["olevba --deobfuscate candidate_cv.docm > macro_deobf.txt"],
+        observation: "The concatenated strings reassembled into a PowerShell command with -EncodedCommand, pointing at an external domain."
+      },
+      {
+        phase: "Dynamic analysis",
+        title: "Open with macros enabled, network simulated",
+        commands: ["# open candidate_cv.docm in Word, enable content", "# watch with Process Monitor"],
+        observation: "The macro spawned powershell.exe with the encoded command. The outbound request failed to resolve on INetSim (no HTTP handler set up for that domain), so no second-stage payload was retrieved."
+      },
+      {
+        phase: "Verdict",
+        title: "Classify with caveats",
+        commands: [],
+        observation: "Behaviour is consistent with a macro dropper, but without the second-stage payload the full intent couldn't be confirmed."
+      }
+    ],
+    mitre: [
+      { id: "T1204.002", name: "User Execution: Malicious File" },
+      { id: "T1059.001", name: "Command and Scripting Interpreter: PowerShell" },
+      { id: "T1027", name: "Obfuscated Files or Information" }
+    ],
+    iocs: [],
+    conclusion: "Marked suspicious rather than confirmed malicious since the payload couldn't be retrieved. Kept the sample and the domain on a watch list, and set up an INetSim HTTP handler for that domain pattern so a follow-up run can go further."
+  }
+];
+
+function chipClassForVerdict(v) {
+  if (v === "malicious") return "pink";
+  if (v === "suspicious") return "butter";
+  return "sage";
+}
+
+function esc(v) {
+  if (v === undefined || v === null) return "";
+  return String(v)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+function slugify(title, fallbackIndex) {
+  const s = String(title || "").toLowerCase().trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "");
+  return s || ("case-" + fallbackIndex);
+}
+
+function metaRow(label, value) {
+  if (!value) return "";
+  return '<div><strong>' + label + ':</strong> ' + esc(value) + '</div>';
+}
+
+function renderDefaultEnvironment() {
+  const el = document.getElementById("env-section");
+  const env = defaultEnvironment || {};
+  const envHtml = (env.os || (env.tools && env.tools.length) || env.network || env.vmSpecs) ?
+    '<div class="env-box">' +
+      (env.os ? '<div class="env-row"><strong>VM / OS:</strong> ' + esc(env.os) + '</div>' : '') +
+      (env.vmSpecs ? '<div class="env-row"><strong>VM specs:</strong> ' + esc(env.vmSpecs) + '</div>' : '') +
+      (env.tools && env.tools.length ? '<div class="env-row"><strong>Tools used:</strong> ' + env.tools.map(esc).join(", ") + '</div>' : '') +
+      (env.network ? '<div class="env-row"><strong>Network setup:</strong> ' + esc(env.network) + '</div>' : '') +
+    '</div>' : '';
+
+  el.innerHTML =
+    '<h2>My default lab setup</h2>' +
+    '<p class="env-sub">Applies to every case below unless a case notes a deviation.</p>' +
+    envHtml;
+}
+
+let currentFilter = { search: "", verdict: "", tag: "" };
+
+function labMatchesFilter(lab) {
+  const v = currentFilter.verdict;
+  const t = currentFilter.tag;
+  const q = currentFilter.search.trim().toLowerCase();
+
+  if (v && lab.verdict !== v) return false;
+  if (t && !(lab.tags || []).includes(t)) return false;
+
+  if (q) {
+    const haystack = [
+      lab.title, lab.summary, lab.conclusion, lab.environmentNote,
+      ...(lab.tags || []),
+      ...(lab.iocs || []),
+      ...((defaultEnvironment && defaultEnvironment.tools) || []),
+      (lab.sample && lab.sample.sha256) || "",
+      ...((lab.mitre || []).map(function (m) { return m.id + " " + m.name; }))
+    ].join(" ").toLowerCase();
+    if (!haystack.includes(q)) return false;
+  }
+  return true;
+}
+
+function populateTagFilter() {
+  const select = document.getElementById("tag-filter");
+  const allTags = new Set();
+  labs.forEach(function (lab) { (lab.tags || []).forEach(function (t) { allTags.add(t); }); });
+  Array.from(allTags).sort().forEach(function (t) {
+    const opt = document.createElement("option");
+    opt.value = t;
+    opt.textContent = t;
+    select.appendChild(opt);
+  });
+}
+
+function stepHtml(s, i) {
+  const detailHtml = (s.detail && s.detail.length) ?
+    '<ul class="step-detail-list">' + s.detail.map(function (d) { return '<li>' + esc(d) + '</li>'; }).join("") + '</ul>' : '';
+
+  const commandsHtml = (s.commands && s.commands.length) ?
+    '<div class="code-block-wrap">' +
+      '<div class="code-block-label">Run</div>' +
+      '<div class="code-block">' + s.commands.map(esc).join("\n") + '<button class="copy-btn" data-copy>Copy</button></div>' +
+    '</div>' : '';
+
+  const expectedHtml = s.expectedOutput ?
+    '<div class="code-block-wrap">' +
+      '<div class="code-block-label">Expected output / behaviour</div>' +
+      '<div class="code-block output-block">' + esc(s.expectedOutput) + '<button class="copy-btn" data-copy>Copy</button></div>' +
+    '</div>' : '';
+
+  const findingsHtml = (s.findings && s.findings.length) ?
+    '<div class="findings-row">' +
+      s.findings.map(function (f) {
+        const type = (f.type || "other").toLowerCase();
+        const hasNote = !!f.note;
+        return '<span class="finding-chip' + (hasNote ? ' has-note' : '') + '"' + (hasNote ? ' title="' + esc(f.note) + '"' : '') + '>' +
+          '<span class="finding-type-tag ' + esc(type) + '">' + esc(f.type || "other") + '</span>' +
+          '<span class="finding-value">' + esc(f.value) + '</span>' +
+        '</span>';
+      }).join("") +
+    '</div>' : '';
+
+  const warningHtml = s.warning ?
+    '<div class="step-warning">⚠️ <span>' + esc(s.warning) + '</span></div>' : '';
+
+  const artifactsHtml = (s.artifacts && s.artifacts.length) ?
+    '<p class="step-artifacts"><strong>Save as you go:</strong> ' + s.artifacts.map(esc).join("; ") + '</p>' : '';
+
+  return '<li class="step-item">' +
+    '<span class="step-num">' + (i + 1) + '</span>' +
+    '<div class="step-text">' +
+      '<div class="step-text-head"><h4>' + esc(s.title) + '</h4>' + (s.phase ? '<span class="chip neutral">' + esc(s.phase) + '</span>' : '') + '</div>' +
+      detailHtml +
+      commandsHtml +
+      expectedHtml +
+      findingsHtml +
+      warningHtml +
+      (s.observation ? '<p class="observation-label">Observed</p><p>' + esc(s.observation) + '</p>' : '') +
+      artifactsHtml +
+    '</div>' +
+  '</li>';
+}
+
+function renderLabs() {
+  const list = document.getElementById("lab-list");
+  const countEl = document.getElementById("result-count");
+  const hashTarget = (location.hash || "").replace("#", "");
+
+  const visible = labs.filter(labMatchesFilter);
+  countEl.textContent = visible.length + " / " + labs.length + " case file" + (labs.length === 1 ? "" : "s");
+
+  if (!labs.length) {
+    list.innerHTML = '<p class="lab-empty">No case files yet — add your first analysis to the "labs" array near the bottom of this page.</p>';
+    return;
+  }
+  if (!visible.length) {
+    list.innerHTML = '<p class="lab-empty">No case files match your search/filters.</p>';
+    return;
+  }
+
+  list.innerHTML = visible.map(function (lab, idx) {
+    const slug = lab.id || slugify(lab.title, idx);
+    const sample = lab.sample || {};
+
+    const tagChips = (lab.tags || []).map(function (t) {
+      return '<span class="chip neutral tag-btn" data-tag="' + esc(t) + '">' + esc(t) + '</span>';
+    }).join("");
+
+    const diffDurChips =
+      (lab.difficulty ? '<span class="chip sage">' + esc(lab.difficulty) + '</span>' : '') +
+      (lab.duration ? '<span class="chip neutral">' + esc(lab.duration) + '</span>' : '');
+
+    const metaGrid = [
+      metaRow("File type", sample.fileType),
+      metaRow("File size", sample.fileSize),
+      metaRow("Delivery", sample.deliveryVector),
+      metaRow("Acquisition", sample.acquisitionNotes),
+      metaRow("MD5", sample.md5),
+      metaRow("SHA-1", sample.sha1),
+      metaRow("SHA-256", sample.sha256)
+    ].join("");
+
+    const prereqHtml = (lab.prerequisites && lab.prerequisites.length) ?
+      '<div class="section-label">Prerequisites</div><ul class="prereq-list">' +
+        lab.prerequisites.map(function (p) { return '<li>' + esc(p) + '</li>'; }).join("") +
+      '</ul>' : '';
+
+    const stepsHtml = (lab.steps || []).map(stepHtml).join("");
+
+    const mitreHtml = (lab.mitre && lab.mitre.length) ?
+      '<div class="mitre-list">' + lab.mitre.map(function (m) {
+        return '<span class="chip mitre mono">' + esc(m.id) + ' — ' + esc(m.name) + '</span>';
+      }).join("") + '</div>' : '';
+
+    const iocsHtml = (lab.iocs && lab.iocs.length) ? '<div class="ioc-box">' + lab.iocs.map(esc).join("<br>") + '</div>' : '';
+
+    const refsHtml = (lab.references && lab.references.length) ?
+      '<div class="section-label">References</div><ul class="ref-list">' +
+        lab.references.map(function (r) {
+          return '<li><a href="' + esc(r.url) + '" target="_blank" rel="noopener noreferrer">' + esc(r.label) + '</a></li>';
+        }).join("") +
+      '</ul>' : '';
+
+    const safetyHtml = lab.safetyNotes ?
+      '<div class="safety-banner"><span class="icon">🛡️</span><span>' + esc(lab.safetyNotes) + '</span></div>' : '';
+
+    const envNoteHtml = lab.environmentNote ?
+      '<div class="env-note-banner">🔧&nbsp;<span><strong>Differs from default setup:</strong> ' + esc(lab.environmentNote) + '</span></div>' : '';
+
+    const isTarget = hashTarget && hashTarget === slug;
+
+    return '<details class="lab-card' + (isTarget ? ' is-target' : '') + '" id="' + esc(slug) + '"' + (isTarget ? ' open' : '') + '>' +
+      '<summary>' +
+        '<div class="lab-top"><h3 class="lab-title">' + esc(lab.title) + '</h3>' +
+          '<div class="lab-date-col"><span class="lab-date">' + esc(lab.date) + '</span></div>' +
+        '</div>' +
+        '<div><span class="chip ' + chipClassForVerdict(lab.verdict) + '">' + esc(lab.verdict) + '</span>' + diffDurChips + tagChips + '</div>' +
+        '<p class="lab-summary">' + esc(lab.summary) + '</p>' +
+      '</summary>' +
+      '<div class="lab-body">' +
+        safetyHtml +
+        envNoteHtml +
+        (metaGrid ? '<div class="section-label">Sample</div><div class="meta-grid">' + metaGrid + '</div>' : '') +
+        prereqHtml +
+        (stepsHtml ? '<div class="section-label">Step-by-step walk-through</div><ol class="step-list">' + stepsHtml + '</ol>' : '') +
+        (mitreHtml ? '<div class="section-label">MITRE ATT&amp;CK mapping</div>' + mitreHtml : '') +
+        (iocsHtml ? '<div class="section-label">Indicators of compromise</div>' + iocsHtml : '') +
+        (lab.conclusion ? '<div class="section-label">Conclusion</div><div class="conclusion-box">' + esc(lab.conclusion) + '</div>' : '') +
+        refsHtml +
+      '</div>' +
+    '</details>';
+  }).join("");
+
+  if (hashTarget) {
+    const el = document.getElementById(hashTarget);
+    if (el) setTimeout(function () { el.scrollIntoView({ block: "start" }); }, 30);
+  }
+}
+
+function attachControlListeners() {
+  document.getElementById("search-input").addEventListener("input", function (e) {
+    currentFilter.search = e.target.value;
+    renderLabs();
+  });
+  document.getElementById("verdict-filter").addEventListener("change", function (e) {
+    currentFilter.verdict = e.target.value;
+    renderLabs();
+  });
+  document.getElementById("tag-filter").addEventListener("change", function (e) {
+    currentFilter.tag = e.target.value;
+    renderLabs();
+  });
+}
+
+// Delegated click handling for tag chips and copy buttons (content is re-rendered often)
+document.addEventListener("click", function (e) {
+  const tagBtn = e.target.closest("[data-tag]");
+  if (tagBtn) {
+    const tag = tagBtn.getAttribute("data-tag");
+    currentFilter.tag = tag;
+    document.getElementById("tag-filter").value = tag;
+    renderLabs();
+    return;
+  }
+  const copyBtn = e.target.closest("[data-copy]");
+  if (copyBtn) {
+    const block = copyBtn.closest(".code-block");
+    const text = block.textContent.replace(/Copy$/, "").trim();
+    navigator.clipboard.writeText(text).then(function () {
+      const original = copyBtn.textContent;
+      copyBtn.textContent = "Copied!";
+      copyBtn.classList.add("copied");
+      setTimeout(function () {
+        copyBtn.textContent = original;
+        copyBtn.classList.remove("copied");
+      }, 1400);
+    });
+  }
+});
+
+renderDefaultEnvironment();
+populateTagFilter();
+attachControlListeners();
+renderLabs();
+</script>
+
+</body>
+</html>

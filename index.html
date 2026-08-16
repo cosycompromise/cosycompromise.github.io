@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Malware Analysis Cottage</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@500;600;700&family=Nunito:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --cream: #fdf3f7;
+    --cream-2: #f9e4ef;
+    --brown: #532b45;
+    --brown-soft: #855b78;
+    --pink: #f0bfe0;
+    --pink-deep: #b8298f;
+    --sage: #d1b6dd;
+    --sage-deep: #8a4fa0;
+    --butter: #f6d9ab;
+    --butter-deep: #c9944a;
+    --card: #fffafc;
+    --shadow: 0 6px 18px rgba(83, 43, 69, 0.09);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: 'Nunito', sans-serif;
+    background: var(--cream);
+    color: var(--brown);
+    line-height: 1.7;
+  }
+
+  h1, h2, h3, .brand {
+    font-family: 'Quicksand', sans-serif;
+    font-weight: 700;
+  }
+
+  a { color: var(--sage-deep); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  .wrap { max-width: 920px; margin: 0 auto; padding: 0 24px; }
+
+  nav {
+    position: sticky;
+    top: 0;
+    background: rgba(253, 243, 247, 0.92);
+    backdrop-filter: blur(6px);
+    border-bottom: 1px solid rgba(83,43,69,0.08);
+    z-index: 10;
+  }
+  nav .wrap {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 24px;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  .brand { font-size: 20px; color: var(--brown); }
+  .brand span { color: var(--pink-deep); }
+  .navlinks { display: flex; gap: 8px; flex-wrap: wrap; }
+  .navlinks a {
+    background: var(--card);
+    border: 1px solid rgba(83,43,69,0.1);
+    border-radius: 999px;
+    padding: 7px 16px;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--brown-soft);
+  }
+  .navlinks a:hover { background: var(--pink); color: var(--brown); text-decoration: none; }
+
+  header.hero {
+    position: relative;
+    overflow: hidden;
+    text-align: center;
+    padding: 72px 24px 90px;
+  }
+  header.hero .wrap { position: relative; z-index: 2; }
+  .hero .icon-row { font-size: 34px; margin-bottom: 14px; }
+  header.hero h1 { font-size: 40px; margin: 0 0 12px; }
+  header.hero p { font-size: 17px; color: var(--brown-soft); max-width: 560px; margin: 0 auto; }
+
+  .hero-blossom {
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 380px;
+    max-width: 55%;
+    height: auto;
+    z-index: 1;
+    pointer-events: none;
+    user-select: none;
+  }
+  @media (max-width: 640px) { .hero-blossom { width: 220px; } }
+
+  .petals {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    z-index: 1;
+    pointer-events: none;
+  }
+  .petal {
+    position: absolute;
+    top: -12px;
+    width: 9px;
+    height: 7px;
+    background: var(--pink-deep);
+    border-radius: 60% 10% 60% 10%;
+    animation-name: petal-fall;
+    animation-timing-function: linear;
+    animation-iteration-count: infinite;
+    opacity: 0.85;
+  }
+  .petal:nth-child(odd) { background: var(--pink); }
+  .petal.p1 { left: 12%; animation-duration: 7s; animation-delay: 0s; }
+  .petal.p2 { left: 20%; animation-duration: 9s; animation-delay: 1.4s; }
+  .petal.p3 { left: 28%; animation-duration: 6.5s; animation-delay: 3s; }
+  .petal.p4 { left: 38%; animation-duration: 8s; animation-delay: 0.6s; }
+  .petal.p5 { left: 15%; animation-duration: 10s; animation-delay: 4.5s; }
+  .petal.p6 { left: 33%; animation-duration: 7.5s; animation-delay: 2.2s; }
+  .petal.p7 { left: 22%; animation-duration: 8.5s; animation-delay: 5.6s; }
+  .petal.p8  { left: 58%; animation-duration: 7s;   animation-delay: 0.8s; }
+  .petal.p9  { left: 66%; animation-duration: 9s;   animation-delay: 2.6s; }
+  .petal.p10 { left: 74%; animation-duration: 6.5s; animation-delay: 4.8s; }
+  .petal.p11 { left: 84%; animation-duration: 8s;   animation-delay: 1.2s; }
+  .petal.p12 { left: 60%; animation-duration: 10s;  animation-delay: 5.5s; }
+  .petal.p13 { left: 78%; animation-duration: 7.5s; animation-delay: 3.4s; }
+  .petal.p14 { left: 68%; animation-duration: 8.5s; animation-delay: 6.2s; }
+
+  @keyframes petal-fall {
+    0%   { transform: translate(0, 0) rotate(0deg); opacity: 0; }
+    8%   { opacity: 0.85; }
+    50%  { transform: translate(40px, 140px) rotate(180deg); }
+    92%  { opacity: 0.7; }
+    100% { transform: translate(10px, 260px) rotate(360deg); opacity: 0; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .petal { animation: none; opacity: 0; }
+  }
+
+  section { padding: 40px 24px 8px; }
+  section h2 {
+    font-size: 26px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 6px;
+  }
+  section > .wrap > p.lede { color: var(--brown-soft); margin-top: 0; margin-bottom: 28px; }
+
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px; height: 40px;
+    border-radius: 50%;
+    font-size: 18px;
+  }
+  .badge.pink { background: var(--pink); }
+  .badge.sage { background: var(--sage); }
+  .badge.butter { background: var(--butter); }
+
+  .grid-2 {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 18px;
+    margin-bottom: 12px;
+  }
+  @media (max-width: 640px) { .grid-2 { grid-template-columns: 1fr; } }
+
+  .card {
+    background: var(--card);
+    border-radius: 18px;
+    padding: 22px 24px;
+    box-shadow: var(--shadow);
+    border: 1px solid rgba(83,43,69,0.06);
+  }
+  .card h3 { margin: 0 0 8px; font-size: 18px; }
+  .card p { margin: 0; color: var(--brown-soft); font-size: 15px; }
+  .card ul { margin: 10px 0 0; padding-left: 18px; color: var(--brown-soft); font-size: 15px; }
+  .card li { margin-bottom: 4px; }
+
+  .tag-title { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .tag-title .dot { width: 10px; height: 10px; border-radius: 50%; }
+  .dot.sage { background: var(--sage-deep); }
+  .dot.pink { background: var(--pink-deep); }
+  .dot.butter { background: var(--butter-deep); }
+
+  .safety {
+    margin: 28px 0 8px;
+    background: var(--cream-2);
+    border-radius: 18px;
+    padding: 20px 24px;
+    border: 1px dashed var(--pink-deep);
+  }
+  .safety h3 { margin-top: 0; font-size: 16px; }
+  .safety ul { margin: 8px 0 0; padding-left: 18px; color: var(--brown-soft); }
+  .safety li { margin-bottom: 4px; }
+
+  .tool-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 16px;
+    margin-bottom: 32px;
+  }
+  @media (max-width: 640px) { .tool-grid { grid-template-columns: 1fr; } }
+
+  .tool-pill {
+    background: var(--card);
+    border-radius: 14px;
+    padding: 6px 0;
+    box-shadow: var(--shadow);
+  }
+  .tool-pill .tool-name {
+    font-weight: 700;
+    padding: 12px 18px 2px;
+    display: block;
+  }
+  .tool-pill .tool-desc {
+    padding: 0 18px 14px;
+    color: var(--brown-soft);
+    font-size: 14px;
+    display: block;
+  }
+
+  .teaser-card {
+    background: var(--card);
+    border-radius: 18px;
+    box-shadow: var(--shadow);
+    border: 1px solid rgba(83,43,69,0.06);
+    padding: 22px 26px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 20px;
+    flex-wrap: wrap;
+  }
+  .teaser-card h2 { margin: 0 0 6px; font-size: 20px; display: flex; align-items: center; gap: 8px; }
+  .teaser-card p { margin: 0; color: var(--brown-soft); font-size: 14px; max-width: 420px; }
+  .cta-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--sage);
+    color: var(--sage-deep);
+    font-weight: 700;
+    font-size: 14px;
+    padding: 10px 20px;
+    border-radius: 999px;
+    white-space: nowrap;
+  }
+  .cta-pill:hover { background: var(--sage-deep); color: var(--card); text-decoration: none; }
+
+  details.glossary {
+    background: var(--card);
+    border-radius: 14px;
+    margin-bottom: 10px;
+    box-shadow: var(--shadow);
+    overflow: hidden;
+  }
+  details.glossary summary {
+    cursor: pointer;
+    padding: 14px 20px;
+    font-weight: 700;
+    font-family: 'Quicksand', sans-serif;
+    list-style: none;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  details.glossary summary::-webkit-details-marker { display: none; }
+  details.glossary summary::after {
+    content: "+";
+    color: var(--sage-deep);
+    font-size: 20px;
+  }
+  details.glossary[open] summary::after { content: "–"; }
+  details.glossary .term-body {
+    padding: 0 20px 16px;
+    color: var(--brown-soft);
+    font-size: 15px;
+  }
+
+  footer {
+    text-align: center;
+    padding: 48px 24px 60px;
+    color: var(--brown-soft);
+    font-size: 14px;
+  }
+  footer .heart { color: var(--pink-deep); }
+
+  .divider {
+    border: none;
+    border-top: 1px solid rgba(83,43,69,0.08);
+    margin: 40px 0 0;
+  }
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="wrap">
+    <div class="brand">the malware analysis <span>cottage</span></div>
+    <div class="navlinks">
+      <a href="#basics">the basics</a>
+      <a href="#toolbox">the toolbox</a>
+      <a href="labs.html">lab notebook</a>
+      <a href="#glossary">glossary</a>
+    </div>
+  </div>
+</nav>
+
+<header class="hero">
+  <img class="hero-blossom" src="cherry-blossom-corner.png" alt="" aria-hidden="true">
+  <div class="petals" aria-hidden="true">
+    <div class="petal p1"></div>
+    <div class="petal p2"></div>
+    <div class="petal p3"></div>
+    <div class="petal p4"></div>
+    <div class="petal p5"></div>
+    <div class="petal p6"></div>
+    <div class="petal p7"></div>
+    <div class="petal p8"></div>
+    <div class="petal p9"></div>
+    <div class="petal p10"></div>
+    <div class="petal p11"></div>
+    <div class="petal p12"></div>
+    <div class="petal p13"></div>
+    <div class="petal p14"></div>
+  </div>
+  <div class="wrap">
+    <div class="icon-row">🍄 🧵 🔬 🍵</div>
+    <h1>Welcome in, come sit a while</h1>
+    <p>A cosy little corner of the internet for learning how malicious software actually works — one sample, one cup of tea, and one careful click at a time.</p>
+  </div>
+</header>
+
+<section id="basics">
+  <div class="wrap">
+    <h2><span class="badge pink">🔍</span> The basics</h2>
+    <p class="lede">Malware analysis is the practice of studying a malicious file or program to understand what it does, how it works, and how to detect or stop it — useful for incident response, threat intelligence, and detection engineering alike.</p>
+
+    <div class="grid-2">
+      <div class="card">
+        <div class="tag-title"><span class="dot sage"></span><h3>Static analysis</h3></div>
+        <p>Examining a sample without running it: looking at its file structure, strings, imports, hashes, and code, usually with a disassembler or decompiler.</p>
+        <ul>
+          <li>Safer as a first step — nothing executes</li>
+          <li>Reveals structure, metadata, and possible packing/obfuscation</li>
+          <li>Can be limited by encryption or heavy obfuscation</li>
+        </ul>
+      </div>
+      <div class="card">
+        <div class="tag-title"><span class="dot pink"></span><h3>Dynamic analysis</h3></div>
+        <p>Running the sample in a controlled, isolated environment and observing its behaviour: file/registry changes, network calls, process activity.</p>
+        <ul>
+          <li>Shows real runtime behaviour, including unpacked code</li>
+          <li>Requires a safe, isolated sandbox</li>
+          <li>Some malware detects sandboxes and hides its behaviour</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="safety">
+      <h3>🕯️ A gentle safety reminder</h3>
+      <ul>
+        <li>Only ever analyse samples inside an isolated virtual machine e.g., FlareVM, snapshotted before every run</li>
+        <li>Disable shared folders, disable or simulate network access (e.g. with INetSim or FakeNet)</li>
+        <li>Never analyse malware on a personal or production machine</li>
+        <li>Handle samples in line with your organisation's policy and local law</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<hr class="divider">
+
+<section id="toolbox">
+  <div class="wrap">
+    <h2><span class="badge sage">🧰</span> The toolbox</h2>
+    <p class="lede">A cosy shelf of tools, sorted by what they're best at.</p>
+
+    <h3 style="font-size:15px; color: var(--brown-soft); margin-bottom: 10px;">for static analysis</h3>
+    <div class="tool-grid">
+      <div class="tool-pill">
+        <span class="tool-name">PEStudio</span>
+        <span class="tool-desc">Quick first look at a Windows executable's structure, strings, and indicators.</span>
+      </div>
+      <div class="tool-pill">
+        <span class="tool-name">Ghidra</span>
+        <span class="tool-desc">Free disassembler and decompiler from NSA's research directorate.</span>
+      </div>
+      <div class="tool-pill">
+        <span class="tool-name">IDA Free / IDA Pro</span>
+        <span class="tool-desc">Industry-standard disassembler for deep reverse engineering.</span>
+      </div>
+      <div class="tool-pill">
+        <span class="tool-name">Detect It Easy (DIE)</span>
+        <span class="tool-desc">Identifies packers, compilers, and file types at a glance.</span>
+      </div>
+    </div>
+
+    <h3 style="font-size:15px; color: var(--brown-soft); margin-bottom: 10px;">for dynamic analysis</h3>
+    <div class="tool-grid">
+      <div class="tool-pill">
+        <span class="tool-name">Cuckoo Sandbox</span>
+        <span class="tool-desc">Open-source automated sandbox for behavioural analysis.</span>
+      </div>
+      <div class="tool-pill">
+        <span class="tool-name">Process Monitor / Explorer</span>
+        <span class="tool-desc">Sysinternals tools for watching file, registry, and process activity live.</span>
+      </div>
+      <div class="tool-pill">
+        <span class="tool-name">Wireshark</span>
+        <span class="tool-desc">Captures and inspects network traffic generated by a running sample.</span>
+      </div>
+      <div class="tool-pill">
+        <span class="tool-name">Regshot</span>
+        <span class="tool-desc">Snapshots the registry before and after execution to spot changes.</span>
+      </div>
+    </div>
+
+    <h3 style="font-size:15px; color: var(--brown-soft); margin-bottom: 10px;">online sandboxes &amp; hunting</h3>
+    <div class="tool-grid">
+      <div class="tool-pill">
+        <span class="tool-name">ANY.RUN / Hybrid Analysis</span>
+        <span class="tool-desc">Interactive, web-based sandboxes for quick behavioural triage.</span>
+      </div>
+      <div class="tool-pill">
+        <span class="tool-name">VirusTotal</span>
+        <span class="tool-desc">Multi-engine scanning and community intelligence on a given sample or hash.</span>
+      </div>
+      <div class="tool-pill">
+        <span class="tool-name">YARA</span>
+        <span class="tool-desc">Pattern-matching rules to identify and classify malware families.</span>
+      </div>
+      <div class="tool-pill">
+        <span class="tool-name">capa</span>
+        <span class="tool-desc">Automatically identifies capabilities in a binary (FLARE team, Mandiant).</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<hr class="divider">
+
+<section id="labs">
+  <div class="wrap">
+    <div class="teaser-card">
+      <div>
+        <h2>🧪 The lab notebook</h2>
+        <p>Step-by-step case files from samples analysed in my own virtual machines.</p>
+      </div>
+      <a class="cta-pill" href="labs.html">Open the lab notebook →</a>
+    </div>
+  </div>
+</section>
+
+<hr class="divider">
+
+<section id="glossary">
+  <div class="wrap">
+    <h2><span class="badge butter">📖</span> A little glossary</h2>
+    <p class="lede">Terms worth keeping in your back pocket. Tap one to open it.</p>
+
+    <details class="glossary">
+      <summary>IOC (indicator of compromise)</summary>
+      <div class="term-body">A piece of forensic evidence — a hash, IP address, domain, or file path — that suggests a system has been compromised.</div>
+    </details>
+    <details class="glossary">
+      <summary>Hash (MD5 / SHA-1 / SHA-256)</summary>
+      <div class="term-body">A fixed-length fingerprint of a file's contents, used to identify and share samples without sharing the file itself.</div>
+    </details>
+    <details class="glossary">
+      <summary>Sandbox</summary>
+      <div class="term-body">An isolated environment where a suspicious sample can run without risking the host system or network.</div>
+    </details>
+    <details class="glossary">
+      <summary>Packer / obfuscation</summary>
+      <div class="term-body">Techniques that compress or scramble a malware's real code to make static analysis harder and evade signature detection.</div>
+    </details>
+    <details class="glossary">
+      <summary>C2 (command and control)</summary>
+      <div class="term-body">The infrastructure an attacker uses to communicate with and issue instructions to infected machines.</div>
+    </details>
+    <details class="glossary">
+      <summary>Payload</summary>
+      <div class="term-body">The part of the malware that carries out its actual malicious action, once delivery and execution succeed.</div>
+    </details>
+    <details class="glossary">
+      <summary>Dropper / loader</summary>
+      <div class="term-body">A small program whose only job is to fetch and install a further, often larger, malicious payload.</div>
+    </details>
+    <details class="glossary">
+      <summary>Persistence</summary>
+      <div class="term-body">Mechanisms malware uses to survive a reboot or logoff, such as registry run keys or scheduled tasks.</div>
+    </details>
+    <details class="glossary">
+      <summary>YARA rule</summary>
+      <div class="term-body">A pattern-based rule describing byte sequences, strings, or traits used to identify a malware family.</div>
+    </details>
+    <details class="glossary">
+      <summary>Entropy</summary>
+      <div class="term-body">A measure of randomness in a file's data — unusually high entropy often hints at encryption or packing.</div>
+    </details>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    made with <span class="heart">♥</span> for curious analysts everywhere — stay cosy, stay careful
+  </div>
+</footer>
+
+</body>
+</html>
