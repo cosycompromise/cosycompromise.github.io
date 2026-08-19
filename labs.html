@@ -280,8 +280,72 @@
   .step-text h4 { margin: 0; font-size: 14.5px; }
   .step-text p { margin: 0 0 4px; font-size: 14px; color: var(--brown-soft); }
   .step-text p.observation-label { font-weight: 700; color: var(--brown); font-size: 12.5px; margin: 8px 0 2px; }
+  .observation-list { margin: 0 0 4px; padding-left: 18px; font-size: 14px; color: var(--brown-soft); }
+  .observation-list li { margin-bottom: 3px; }
+  .inline-code {
+    font-family: monospace;
+    font-size: 0.92em;
+    background: var(--cream-2);
+    color: var(--brown);
+    padding: 1px 5px;
+    border-radius: 4px;
+    word-break: break-all;
+  }
   .step-detail-list { margin: 4px 0 8px; padding-left: 18px; font-size: 13.5px; color: var(--brown-soft); }
   .step-detail-list li { margin-bottom: 3px; }
+
+  .howto-callout {
+    background: var(--cream-2);
+    border: 1px solid rgba(83,43,69,0.1);
+    border-radius: 16px;
+    padding: 18px 20px;
+    margin: 10px 0;
+    color: var(--brown);
+  }
+  .howto-panel h5 { margin: 0 0 8px; font-size: 15.5px; color: var(--brown); font-family: 'Quicksand', sans-serif; font-weight: 700; }
+  .howto-panel p { margin: 0; font-size: 13.5px; line-height: 1.6; color: var(--brown-soft); }
+  .howto-controls {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-top: 16px;
+  }
+  .howto-pills { display: flex; flex-wrap: wrap; gap: 6px; }
+  .howto-pill {
+    width: 26px; height: 26px;
+    border-radius: 50%;
+    border: none;
+    background: var(--card);
+    color: var(--brown-soft);
+    font-family: 'Nunito', sans-serif;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: inset 0 0 0 1px rgba(83,43,69,0.12);
+  }
+  .howto-pill:hover { background: var(--pink); color: var(--pink-deep); }
+  .howto-pill.active { background: var(--pink-deep); color: #fff; box-shadow: none; }
+  .howto-nav { display: flex; gap: 8px; }
+  .howto-btn {
+    font-family: 'Nunito', sans-serif;
+    font-size: 12.5px;
+    font-weight: 700;
+    padding: 7px 14px;
+    border-radius: 999px;
+    border: none;
+    cursor: pointer;
+  }
+  .howto-btn.howto-back { background: var(--card); color: var(--brown-soft); box-shadow: inset 0 0 0 1px rgba(83,43,69,0.12); }
+  .howto-btn.howto-back:hover:not(:disabled) { background: var(--cream); }
+  .howto-btn.howto-back:disabled { opacity: 0.4; cursor: default; }
+  .howto-btn.howto-next { background: var(--pink-deep); color: #fff; }
+  .howto-btn.howto-next:hover:not(:disabled) { background: var(--sage-deep); }
+  .howto-btn.howto-next:disabled { opacity: 0.4; cursor: default; }
   .step-warning {
     display: flex;
     gap: 8px;
@@ -518,6 +582,15 @@
     title       - what this step is, e.g. "Check imports and strings"
     detail      - optional array of extra bullet points/sub-steps that
                   add granularity beyond the one-line title
+    howTo       - optional array for a full numbered walkthrough of a
+                  specific tool/technique within this step — more
+                  substantial than "detail" (which is short one-liners).
+                  Each entry is { title: "short imperative title",
+                  description: "a sentence or two of instruction" }.
+                  Renders as a numbered mini-guide under the step. Use
+                  this when a step deserves its own how-to (e.g. "here's
+                  exactly how to set up Procmon filters for triage")
+                  rather than just narrating what you did.
     commands    - array of exact commands/actions run (optional, use []
                   if the step was manual/GUI-only) — this is what makes
                   the step replicable
@@ -541,7 +614,11 @@
     artifacts   - optional array of strings noting what to save at this
                   step (e.g. "screenshot of Process Monitor filter",
                   "export pcap as case002-run1.pcapng")
-    observation - what you actually saw/found when you did this
+    observation - what you actually saw/found when you did this. Can be
+                  a single string, but for anything with more than one
+                  discrete finding, use an array of short strings —
+                  each one renders as its own bullet point, which reads
+                  much more easily than a run-on paragraph.
 
   mitre - optional array of { id, name } ATT&CK technique mappings,
           e.g. { id: "T1566.001", name: "Phishing: Spearphishing Attachment" }
@@ -555,10 +632,10 @@
 // Edit this once — it applies to every case below unless a case sets
 // its own "environmentNote" to flag a deviation.
 const defaultEnvironment = {
-  os: "Windows 10 22H2, isolated VirtualBox VM, snapshot reverted before every run",
-  vmSpecs: "4 vCPU, 8GB RAM, 60GB thin-provisioned disk",
-  tools: ["PEStudio 9.63", "Detect It Easy 3.09", "Process Monitor / Process Explorer (Sysinternals)", "Wireshark 4.2", "INetSim 1.3.2 on a separate host-only gateway VM"],
-  network: "Host-only network only, no internet. INetSim faked DNS and HTTP responses on the gateway VM."
+  os: "Windows 10 22H2, isolated FlareVM environment, snapshot reverted before every run",
+  vmSpecs: "4 vCPU, 9.9GB RAM, 90GB thin-provisioned disk",
+  tools: ["HashMyFiles", "PEStudio 9.63", "Detect It Easy 3.09", "Process Monitor / System Informer (Sysinternals)", "Wireshark 4.2", "FakeNET 3.2"],
+  network: "Host-only network, no internet. FakeNET faked DNS and HTTP responses."
 };
 
 const labs = [
@@ -568,7 +645,7 @@ const labs = [
     verdict: "malicious",
     tags: ["Windows", "PE32", ".NET"],
     summary: ".NET malware compiled with VB.NET that does bad things.",
-    environmentNote: "Analysed in FlareVM rather than the default VirtualBox build; HashMyFiles was used alongside sha256sum for hashing, and Wireshark/INetSim weren't part of this particular run.",
+    environmentNote: "Used dnSpy and de4dot as this was a .NET sample.",
     sample: {
       fileType: "PE32 executable (Windows, GUI)",
       fileSize: "484 KB",
@@ -582,45 +659,149 @@ const labs = [
         phase: "Triage",
         title: "Use HashMyFiles or sha256sum to get a hash, do a hash lookup and first look",
         commands: ["sha256sum netmalware.exe", "# paste hash into VirusTotal"],
-        observation: "61/70 AV engines flagged it as malicious on VirusTotal. PEStudio showed the icon mismatched the real Adobe Reader icon and the binary had no digital signature."
+        howTo: [
+          { title: "Hash the sample", description: "Run sha256sum netmalware.exe (or use HashMyFiles if you're on FlareVM) before anything else touches the file — you want a hash you can trust wasn't altered by later analysis steps." },
+          { title: "Check it against VirusTotal", description: "Paste the SHA-256 into VirusTotal's search rather than uploading the file itself, so you don't hand a possibly-unique sample to every vendor's cloud before you've decided it's worth sharing." },
+          { title: "Compare the detection ratio", description: "A high ratio (here 61/70) is a strong first signal, but don't stop there — a low or zero ratio just means it's new or targeted, not that it's clean." },
+          { title: "Eyeball it in PEStudio", description: "Load the binary into PEStudio for a first pass: check the icon against what it's pretending to be, look for a missing or invalid digital signature, and skim the import table for anything unusual before moving to deeper static analysis." }
+        ],
+        observation: [
+          "61/70 AV engines flagged it as malicious on VirusTotal.",
+          "PEStudio showed the icon mismatched the real Adobe Reader icon.",
+          "The binary had no digital signature."
+        ]
       },
       {
         phase: "Static analysis",
         title: "Strings, imports and packing check",
         commands: ["die netmalware.exe", "strings -n 8 netmalware.exe | grep -i http"],
+        howTo: [
+          { title: "Run a packer check first", description: "Open the sample in Detect It Easy (DIE) before anything else — it tells you quickly whether you're looking at a packed/obfuscated binary, which changes how much static analysis will actually reveal." },
+          { title: "Check section entropy", description: "In DIE, look at each section's entropy. Anything above ~7.0 (out of a max of 8) usually means packed or encrypted content, and tells you dynamic analysis will matter more than static here." },
+          { title: "Pull printable strings", description: "Run strings -n 8 netmalware.exe | grep -i http to surface any hardcoded URLs quickly. Widen the grep (or drop it) if you want to also catch registry paths, mutex names, or config-looking strings." },
+          { title: "Review the import table", description: "Back in PEStudio or DIE, check the Imports tab for anything that hints at capability: SetWindowsHookEx and GetForegroundWindow together are a strong keylogger signal, for example." },
+          { title: "Cross-reference strings against imports", description: "If a suspicious string (like \"keylogger\") lines up with a matching import, that's a much stronger indicator than either alone — note both in your findings." }
+        ],
         findings: [
           { type: "url", value: "hxxp://ziraat-helpdesk[.]com/components/com_content/limpopapa/" },
           { type: "string", value: "keylogger" },
+          { type: "string", value: "&keystrokestyped=" },
+          { type: "string", value: "sdrowssaP" },
+          { type: "string", value: "&windowtitle=" },
           { type: "import", value: "SetWindowsHookEx", note: "used to install a low-level input hook" },
-          { type: "import", value: "GetForegroundWindow", note: "commonly used to log which window keystrokes belong to" }
+          { type: "import", value: "GetForegroundWindow", note: "commonly used to log which window keystrokes belong to" },
+          { type: "import", value: "GetWindowText", note: "used to retrieve the text of a window" }
         ],
-        observation: "Detect It Easy showed the .text section was packed with high entropy of 7.9. Strings and imports (tabulated above) plus multiple references to browsers, usernames and passwords are all signs of a keylogger / infostealer."
+        observation: [
+          "Detect It Easy showed the .text section was packed with high entropy of 7.9.",
+          "Strings and imports (some tabulated above) reference browsers, usernames and passwords.",
+          "These are all signs of a keylogger / infostealer."
+        ]
+      },
+      {
+        phase: "Static / Dynamic analysis",
+        title: "Decompile and debug with dnSpy to see what gets decrypted",
+        commands: ["# dnSpy (x86) → File → Open → dotmalware.exe"],
+        howTo: [
+          { title: "Open the sample in dnSpy (x86)", description: "Launch the 32-bit build of dnSpy (matches a 32-bit .NET binary) and go File → Open File → select dotmalware.exe to load it into the assembly tree." },
+          { title: "Skim Main for implemented methods", description: "Click on the filename and it should tell you the entry point / Main which you can click on. Click through the methods referenced in Main to see which are actually implemented versus stubs. Backspace jumps back to wherever you were in the decompiler view, so you can dig into a method and quickly return to Main." },
+          { title: "Set breakpoints around the decryption", description: "The interesting logic lives in ReadMail(). Set a breakpoint on the first line of ReadMail(), and another on the first line of RSMDecrypt() (the method that actually decrypts the embedded data - note you need to double click it to open the method), so execution pauses right where the plaintext becomes available." },
+          { title: "Run and step through", description: "Click Start to launch the sample under the debugger. When it hits your breakpoints, use Step Over (not Step Into) to move through RSMDecrypt() one line at a time — watch the live output panel at the bottom of dnSpy as you go." },
+          { title: "Step to the return and inspect array2", description: "Keep stepping over until you reach the return array2 line — at that point array2 holds the decrypted data in memory, before it gets used or cleared." },
+          { title: "Dump array2 to a file", description: "Right-click array2 → Show In Memory Window → Memory 1. Right-click inside the Memory window → Save Selection → save as dump.bin." },
+          { title: "Identify the dumped data", description: "Open dump.bin in PEStudio and double click the Description field — this is how you confirm whether it's a legitimate tool being abused, rather than custom malicious code." }
+        ],
+        observation: [
+          "Opening the file in dnSpy reveals the filename is actually `ziraat_limpi.exe`",
+          "Reviewing ClipboardLogging() reveals exactly how the malware obtains clipboard data and uses the SendLog() method to send the `logType`, `WindowTitle`, `KeystrokesTyped`, `Application`, `Host`, `Username`, `Password`, and `ClipboardText` data to a link (likely the established C2 server)",
+          "Given the fact that multiple methods are unimplemented, this is likely a product of malware-as-a-service (MaaS) or a builder kit, where the malware author is selling a pre-built binary to customers who can then configure it with their own C2 server and other options.",
+          "Looking at PasswordRecovery() reveals a method named 'RecoverMail()', which then leads to 'ReadMail()', where we see references to a file named `\\Mails.txt`",
+          "Obtaining the decrypted memory dump from RSMDecrypt() and the magic bytes, `4D 5A` (\"MZ\"), reveals this is an executable. Opening it in PEStudio shows us this is a legitimate tool being abused called 'Mail PassView' by NirSoft, which reveals the passwords and account info for popular email clients."
+        ]
+      },
+      {
+        phase: "Static / Dynamic analysis",
+        title: "Deobfuscate with de4dot and re-analyse in dnSpy",
+        commands: ["cd path\\to\\.NET_Malware.bin", "de4dot .NET_Malware.bin"],
+        howTo: [
+          { title: "Locate the binary", description: "de4dot is a command-line tool used to deobfuscate .NET assemblies, so open a terminal and cd into the folder containing the sample, e.g. netmalware.exe." },
+          { title: "Run de4dot against it", description: "It automatically detects the obfuscator in use and strips as much of it as it can, without you needing to specify which one." },
+          { title: "Locate the cleaned output", description: "de4dot writes its result alongside the original as netmalware-cleaned.exe — the original file is left untouched." },
+          { title: "Open the cleaned binary in dnSpy", description: "Load netmalware-cleaned.exe into dnSpy instead of the original. Renamed/deobfuscated classes are usually far easier to read here." },
+          { title: "Look for the deobfuscated classes", description: "You should see class names like GClass0 that weren't legible in the original obfuscated build — de4dot can't always recover meaningful names, but it does clean up control-flow obfuscation and string encryption enough to make the decompiled code readable." }
+        ],
+        observation: [
+          "de4dot successfully deobfuscated the sample, producing `netmalware-cleaned.exe`.",
+          "A newly-visible class, `GClass0`, appeared which wasn't readable in the original obfuscated build.",
+          "Analysing `GClass0` in dnSpy revealed that this was the part of the malware responsible for obtaining browser data.",
+          "If we debug like we did for the original obfuscated build, and dumping the memory from array2 in RSMDecrypt(), we can see that the decrypted data is actually a legitimate tool called 'WebBrowserPassView' by NirSoft, which reveals the passwords for popular browsers."
+        ]
       },
       {
         phase: "Dynamic analysis",
-        title: "Detonate with network simulated",
-        commands: ["# snapshot the VM, then run:", "invoice_08234.pdf.exe", "# observe with Process Monitor + Wireshark running"],
-        observation: "Process Monitor showed a file written to %TEMP%\\svc_update.exe within 4 seconds of execution. Wireshark captured an HTTP GET to the hardcoded URL, answered by INetSim, followed by the process launching the dropped file."
+        title: "Detonate with network simulated using FakeNET",
+        commands: ["# snapshot the VM, then run:", "netmalware.exe", "# observe with Process Monitor + System Informer + Wireshark running"],
+        howTo: [
+          { title: "Scope Procmon to your process", description: "Filter → Filter... and add: Process Name is netmalware.exe, Include. This cuts out OS/background noise so every event you see belongs to the sample. Add any child process names (or PIDs) as you see them spawn." },
+          { title: "Isolate registry persistence", description: "Add filters: Operation is RegSetValue, Include and Operation is RegCreateKey, Include. Scan the Path column for anything containing \\Run, \\RunOnce, \\Services, or \\Schedule\\TaskCache." },
+          { title: "Isolate file drops", description: "Add filters: Operation is WriteFile, Include and Operation is CreateFile, Include. Watch for writes into %TEMP%, %APPDATA%, %ProgramData%, or the Startup folder." },
+          { title: "Catch process spawning", description: "Add filter: Operation is Process Create, Include. Double-click a spawn event to see its Command Line — this is usually where the real payload logic shows up." },
+          { title: "Catch DLL sideloading", description: "Add filter: Operation is Load Image, Include. Check for DLLs loading from %TEMP% or other non-standard paths instead of System32/SysWOW64." },
+          { title: "Flag network prep", description: "Add filters: Operation is TCP Connect, Include and Operation is UDP Send, Include. Cross-reference the destination IP/port against the Wireshark capture to confirm which process made the call." }
+        ],
+        observation: [
+          "Process Monitor showed the sample writing itself and a companion file to %APPDATA%, consistent with the SetWindowsHookEx / keylogger indicators found in static analysis.",
+          "We see it enumerate my malware analysis toolsuite to detect if it's being watched and likely alter its behaviour or not run the payload at all",
+          "We see it write to `HKLM\\SYSTEM\\CurrentControlSet\\Services\\Tcpip\\Parameters`, but this isn't inherently malicious",
+          "In Process Monitor, we can see the command line arguments `/stext C:\\ProgramData\\Mails.txt` and `/stext C:\\ProgramData\\Browsers.txt` with child PID 3916 (only observable when double clicking the details > Process).",
+          "Wireshark didn't capture anything relevant, nor did FakeNET. Procmon did not show any TCP Connect or UDP Send events, so the sample didn't actually make any network calls in this run. It might have altered its behaviour after enumerating our tools"
+        ]
+      },
+      {
+        phase: "Dynamic analysis",
+        title: "Inspect the live process with System Informer",
+        commands: [],
+        howTo: [
+          { title: "Launch it before you detonate", description: "Start System Informer as Administrator before running the sample, so it's already watching when the process (and any children) appear in the tree view." },
+          { title: "Find the process in the tree", description: "Locate the sample in the process tree once it's running. The parent-child relationship shown here is a quick way to confirm what Procmon's Process Create events told you." },
+          { title: "Check its Handles", description: "Right-click the process → Properties → Handles tab. Look for open handles to things like window stations, desktops, or mutexes — a hook-related handle here lines up nicely with a SetWindowsHookEx import found in static analysis. Note this only shows handles open at the moment you look: quick open-write-close file activity (like periodic log writes) usually won't be caught here even if Procmon already confirmed it happened — Handles is a live snapshot, not a history." },
+          { title: "Check its Memory", description: "Properties → Memory tab. Scan for regions marked PAGE_EXECUTE_READWRITE — RWX memory at runtime is a common sign of a packer unpacking itself or code injection, even when the on-disk file looked packed but static." },
+          { title: "Check loaded Modules", description: "Properties → Modules tab lists every DLL the process has loaded and the path it loaded from. Anything loading from %TEMP% or another non-standard folder instead of System32/SysWOW64 is worth a closer look — the same sideloading check you'd do in Procmon's Load Image events, but browsable in one place." },
+          { title: "Check its Network tab", description: "Properties → Network tab shows active TCP/UDP connections owned by this specific PID. Use it to confirm a connection you saw in Wireshark actually belongs to your sample and not to some unrelated background process." }
+        ],
+        observation: [
+          "No handles to `Mails.txt`, or `Browsers.txt` were visible at inspection time — these writes were already confirmed via Procmon, so this just means the process opens, writes, and closes those files quickly rather than holding them open continuously.",
+          "RWX memory regions were found, but nothing of note here. Navigating to Options -> Strings  and filtering for 'http' shows the hardcoded URL from static analysis but more info `hxxp://ziraat-helpdesk[.]com/components/com_content/limpopapa/post.php?type=clipboard&machinename=REDACTED&windowtitle=&clipboardtext=%TEMP%, %APPDATA%, %ProgramData%&machinetime=13:57`, indicating it communicates with a remote server and would have POSTed my clipboard contents and machine information to the C2 server. This likely would have been seen in beaconing connections had the sample not detected my toolsuite and altered its behaviour.",
+          "The Modules tab confirmed no DLLs were loaded from non-standard paths."
+        ]
       },
       {
         phase: "Verdict",
         title: "Classify and contain",
         commands: [],
-        observation: "Confirmed downloader/dropper behaviour matching a generic PE downloader pattern. No legitimate reason for the observed network call or dropped executable."
+        observation: [
+          "Confirmed keylogger/infostealer behaviour. We see it enumerate browsers, attempt to access passwords, usernames, clipboard content, and send to its C2 server.",
+          "Dropper malware that uses legitimate software by NirSoft to obtain accounts and passwords for popular mail clients and browsers.",
+          "Seems to not function properly in my lab environment, likely due to the sample detecting my toolsuite and altering its behaviour as an anti-analysis technique."
+        ]
       }
     ],
     mitre: [
-      { id: "T1566.001", name: "Phishing: Spearphishing Attachment" },
-      { id: "T1105", name: "Ingress Tool Transfer" },
-      { id: "T1204.002", name: "User Execution: Malicious File" }
+      { id: "T1041", name: "Exfiltration Over C2 Channel" },
+      { id: "T1114", name: "Email Collection" },
+      { id: "T1115", name: "Clipboard Data" },
+      { id: "T1056.001", name: "Input Capture: Keylogging" },
+      { id: "T1056.003", name: "Input Capture: Credential API Hooking" }
     ],
     iocs: [
-      "hxxp://185.203.xx.xx/update.bin (defanged)",
-      "SHA-256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b85",
-      "Dropped file: %TEMP%\\svc_update.exe",
-      "ziraat_limpi.exe, Important.exe"
+      "hxxp://ziraat-helpdesk[.]com (defanged)",
+      "ziraat_limpi.exe",
+      "WebBrowserPassView by NirSoft",
+      "Mail PassView by NirSoft",
+      "/stext C:\\ProgramData\\Mails.txt",
+      "/stext C:\\ProgramData\\Browsers.txt"
     ],
-    conclusion: "Blocked the C2 domain and hash at the email gateway, and wrote a YARA rule on the import combination (URLDownloadToFileA + WinExec + missing signature). Next time I'd also check the PDF icon resource directly rather than relying on visual comparison."
+    conclusion: "Block the C2 domain via firewall and the hash. Write a YARA rule on the import combination (SetWindowsHookEx + GetForegroundWindow + GetWindowText + missing signature)."
   },
   {
     title: "Example #002: The invoice that wasn't",
@@ -642,7 +823,11 @@ const labs = [
         phase: "Triage",
         title: "Hash lookup and first look",
         commands: ["sha256sum invoice_08234.pdf.exe", "# paste hash into VirusTotal"],
-        observation: "32/70 AV engines flagged it as malicious. PEStudio showed the icon mismatched the real Adobe Reader icon and the binary had no digital signature."
+        observation: [
+          "32/70 AV engines flagged it as malicious.",
+          "PEStudio showed the icon mismatched the real Adobe Reader icon.",
+          "The binary had no digital signature."
+        ]
       },
       {
         phase: "Static analysis",
@@ -654,19 +839,29 @@ const labs = [
           { type: "import", value: "CreateProcessA" },
           { type: "url", value: "hxxp://185.203.xx.xx/update.bin" }
         ],
-        observation: "Detect It Easy showed no known packer, but entropy on one section was elevated (~7.1). Strings and imports (tabulated above) point to downloader behaviour."
+        observation: [
+          "Detect It Easy showed no known packer, but entropy on one section was elevated (~7.1).",
+          "Strings and imports (tabulated above) point to downloader behaviour."
+        ]
       },
       {
         phase: "Dynamic analysis",
         title: "Detonate with network simulated",
         commands: ["# snapshot the VM, then run:", "invoice_08234.pdf.exe", "# observe with Process Monitor + Wireshark running"],
-        observation: "Process Monitor showed a file written to %TEMP%\\svc_update.exe within 4 seconds of execution. Wireshark captured an HTTP GET to the hardcoded URL, answered by INetSim, followed by the process launching the dropped file."
+        observation: [
+          "Process Monitor showed a file written to %TEMP%\\svc_update.exe within 4 seconds of execution.",
+          "Wireshark captured an HTTP GET to the hardcoded URL, answered by INetSim.",
+          "The process then launched the dropped file."
+        ]
       },
       {
         phase: "Verdict",
         title: "Classify and contain",
         commands: [],
-        observation: "Confirmed downloader/dropper behaviour matching a generic PE downloader pattern. No legitimate reason for the observed network call or dropped executable."
+        observation: [
+          "Confirmed downloader/dropper behaviour matching a generic PE downloader pattern.",
+          "No legitimate reason for the observed network call or dropped executable."
+        ]
       }
     ],
     mitre: [
@@ -701,7 +896,10 @@ const labs = [
         phase: "Triage",
         title: "Metadata-only inspection",
         commands: ["olevba --no-deobfuscate candidate_cv.docm"],
-        observation: "AutoOpen and Shell function references were flagged, plus a suspicious level of string concatenation inside the macro module."
+        observation: [
+          "AutoOpen and Shell function references were flagged.",
+          "A suspicious level of string concatenation was found inside the macro module."
+        ]
       },
       {
         phase: "Static analysis",
@@ -713,7 +911,11 @@ const labs = [
         phase: "Dynamic analysis",
         title: "Open with macros enabled, network simulated",
         commands: ["# open candidate_cv.docm in Word, enable content", "# watch with Process Monitor"],
-        observation: "The macro spawned powershell.exe with the encoded command. The outbound request failed to resolve on INetSim (no HTTP handler set up for that domain), so no second-stage payload was retrieved."
+        observation: [
+          "The macro spawned powershell.exe with the encoded command.",
+          "The outbound request failed to resolve on INetSim (no HTTP handler set up for that domain).",
+          "No second-stage payload was retrieved."
+        ]
       },
       {
         phase: "Verdict",
@@ -746,6 +948,17 @@ function esc(v) {
     .replace(/>/g, "&gt;");
 }
 
+// Escapes text but converts `backtick-wrapped` segments into inline <code>,
+// so observation bullets (etc) can call out command-line args, paths,
+// registry keys, etc without them getting lost in a wall of prose.
+function formatInline(v) {
+  if (v === undefined || v === null) return "";
+  const parts = String(v).split("`");
+  return parts.map(function (part, idx) {
+    return idx % 2 === 1 ? '<code class="inline-code">' + esc(part) + '</code>' : esc(part);
+  }).join("");
+}
+
 function slugify(title, fallbackIndex) {
   const s = String(title || "").toLowerCase().trim()
     .replace(/[^a-z0-9]+/g, "-")
@@ -776,6 +989,7 @@ function renderDefaultEnvironment() {
 }
 
 let currentFilter = { search: "", verdict: "", tag: "" };
+let howtoCounter = 0;
 
 function labMatchesFilter(lab) {
   const v = currentFilter.verdict;
@@ -815,6 +1029,28 @@ function stepHtml(s, i) {
   const detailHtml = (s.detail && s.detail.length) ?
     '<ul class="step-detail-list">' + s.detail.map(function (d) { return '<li>' + esc(d) + '</li>'; }).join("") + '</ul>' : '';
 
+  const howToHtml = (s.howTo && s.howTo.length) ?
+    (function () {
+      howtoCounter += 1;
+      const panels = s.howTo.map(function (h, hi) {
+        return '<div class="howto-panel"' + (hi === 0 ? '' : ' hidden') + ' data-index="' + hi + '">' +
+          '<h5>' + esc(h.title) + '</h5><p>' + esc(h.description) + '</p></div>';
+      }).join("");
+      const pills = s.howTo.map(function (h, hi) {
+        return '<button type="button" class="howto-pill' + (hi === 0 ? ' active' : '') + '" data-index="' + hi + '">' + (hi + 1) + '</button>';
+      }).join("");
+      return '<div class="howto-callout" data-howto-id="howto-' + howtoCounter + '" data-count="' + s.howTo.length + '">' +
+        '<div class="howto-panels">' + panels + '</div>' +
+        '<div class="howto-controls">' +
+          '<div class="howto-pills">' + pills + '</div>' +
+          '<div class="howto-nav">' +
+            '<button type="button" class="howto-btn howto-back" disabled>Back</button>' +
+            '<button type="button" class="howto-btn howto-next"' + (s.howTo.length <= 1 ? ' disabled' : '') + '>Next</button>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
+    })() : '';
+
   const commandsHtml = (s.commands && s.commands.length) ?
     '<div class="code-block-wrap">' +
       '<div class="code-block-label">Run</div>' +
@@ -850,11 +1086,14 @@ function stepHtml(s, i) {
     '<div class="step-text">' +
       '<div class="step-text-head"><h4>' + esc(s.title) + '</h4>' + (s.phase ? '<span class="chip neutral">' + esc(s.phase) + '</span>' : '') + '</div>' +
       detailHtml +
+      howToHtml +
       commandsHtml +
       expectedHtml +
       findingsHtml +
       warningHtml +
-      (s.observation ? '<p class="observation-label">Observed</p><p>' + esc(s.observation) + '</p>' : '') +
+      (s.observation ? '<p class="observation-label">Observed</p><ul class="observation-list">' +
+        (Array.isArray(s.observation) ? s.observation : [s.observation]).map(function (o) { return '<li>' + formatInline(o) + '</li>'; }).join("") +
+      '</ul>' : '') +
       artifactsHtml +
     '</div>' +
   '</li>';
@@ -864,6 +1103,7 @@ function renderLabs() {
   const list = document.getElementById("lab-list");
   const countEl = document.getElementById("result-count");
   const hashTarget = (location.hash || "").replace("#", "");
+  howtoCounter = 0;
 
   const visible = labs.filter(labMatchesFilter);
   countEl.textContent = visible.length + " / " + labs.length + " case file" + (labs.length === 1 ? "" : "s");
@@ -944,7 +1184,7 @@ function renderLabs() {
         (stepsHtml ? '<div class="section-label">Step-by-step walk-through</div><ol class="step-list">' + stepsHtml + '</ol>' : '') +
         (mitreHtml ? '<div class="section-label">MITRE ATT&amp;CK mapping</div>' + mitreHtml : '') +
         (iocsHtml ? '<div class="section-label">Indicators of compromise</div>' + iocsHtml : '') +
-        (lab.conclusion ? '<div class="section-label">Conclusion</div><div class="conclusion-box">' + esc(lab.conclusion) + '</div>' : '') +
+        (lab.conclusion ? '<div class="section-label">Recommendations</div><div class="conclusion-box">' + esc(lab.conclusion) + '</div>' : '') +
         refsHtml +
       '</div>' +
     '</details>';
@@ -994,6 +1234,37 @@ document.addEventListener("click", function (e) {
         copyBtn.classList.remove("copied");
       }, 1400);
     });
+    return;
+  }
+
+  const howtoCallout = e.target.closest(".howto-callout");
+  if (howtoCallout) {
+    const count = parseInt(howtoCallout.getAttribute("data-count"), 10) || 1;
+    const activePanel = howtoCallout.querySelector(".howto-panel:not([hidden])");
+    let idx = activePanel ? parseInt(activePanel.getAttribute("data-index"), 10) : 0;
+
+    const pillBtn = e.target.closest(".howto-pill");
+    const backBtn = e.target.closest(".howto-back");
+    const nextBtn = e.target.closest(".howto-next");
+
+    if (pillBtn) {
+      idx = parseInt(pillBtn.getAttribute("data-index"), 10);
+    } else if (backBtn && !backBtn.disabled) {
+      idx = Math.max(0, idx - 1);
+    } else if (nextBtn && !nextBtn.disabled) {
+      idx = Math.min(count - 1, idx + 1);
+    } else {
+      return;
+    }
+
+    howtoCallout.querySelectorAll(".howto-panel").forEach(function (p) {
+      p.hidden = parseInt(p.getAttribute("data-index"), 10) !== idx;
+    });
+    howtoCallout.querySelectorAll(".howto-pill").forEach(function (p) {
+      p.classList.toggle("active", parseInt(p.getAttribute("data-index"), 10) === idx);
+    });
+    howtoCallout.querySelector(".howto-back").disabled = (idx === 0);
+    howtoCallout.querySelector(".howto-next").disabled = (idx === count - 1);
   }
 });
 
