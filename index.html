@@ -83,19 +83,6 @@
   header.hero h1 { font-size: 40px; margin: 0 0 12px; }
   header.hero p { font-size: 17px; color: var(--brown-soft); max-width: 560px; margin: 0 auto; }
 
-  .hero-blossom {
-    position: absolute;
-    top: 0;
-    right: 0;
-    width: 380px;
-    max-width: 55%;
-    height: auto;
-    z-index: 1;
-    pointer-events: none;
-    user-select: none;
-  }
-  @media (max-width: 640px) { .hero-blossom { width: 220px; } }
-
   .petals {
     position: absolute;
     inset: 0;
@@ -316,7 +303,6 @@
 </nav>
 
 <header class="hero">
-  <img class="hero-blossom" src="cherry-blossom-corner.png" alt="" aria-hidden="true">
   <div class="petals" aria-hidden="true">
     <div class="petal p1"></div>
     <div class="petal p2"></div>
