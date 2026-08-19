@@ -496,7 +496,7 @@
 
     <div class="safety-banner" id="global-safety-banner">
       <span class="icon">🛡️</span>
-      <span>Every sample on this page was detonated only inside an isolated, snapshotted VM with no direct internet access — network calls were answered by INetSim on a separate host-only gateway, never the real internet. The VM was reverted to a clean snapshot before and after each run.</span>
+      <span>Every sample on this page was detonated only inside an isolated, snapshotted VM with no direct internet access — network calls were answered by FakeNET, never the real internet. The VM was reverted to a clean snapshot before and after each run.</span>
     </div>
 
     <div class="controls">
@@ -750,7 +750,6 @@ const labs = [
           { title: "Flag network prep", description: "Add filters: Operation is TCP Connect, Include and Operation is UDP Send, Include. Cross-reference the destination IP/port against the Wireshark capture to confirm which process made the call." }
         ],
         observation: [
-          "Process Monitor showed the sample writing itself and a companion file to %APPDATA%, consistent with the SetWindowsHookEx / keylogger indicators found in static analysis.",
           "We see it enumerate my malware analysis toolsuite to detect if it's being watched and likely alter its behaviour or not run the payload at all",
           "We see it write to `HKLM\\SYSTEM\\CurrentControlSet\\Services\\Tcpip\\Parameters`, but this isn't inherently malicious",
           "In Process Monitor, we can see the command line arguments `/stext C:\\ProgramData\\Mails.txt` and `/stext C:\\ProgramData\\Browsers.txt` with child PID 3916 (only observable when double clicking the details > Process).",
