@@ -698,7 +698,7 @@ const labs = [
     steps: [
       {
         phase: "Triage",
-        title: "Use HashMyFiles or sha256sum to get a hash, do a hash lookup and first look",
+        title: "Use HashMyFiles or sha256sum to get a hash, do a hash lookup on VirusTotal",
         commands: ["sha256sum PandaBanker.bin", "# paste hash into VirusTotal"],
         howTo: [
           { title: "Hash the sample", description: "Run sha256sum PandaBanker.bin (or use HashMyFiles if you're on FlareVM)." },
@@ -718,8 +718,6 @@ const labs = [
           { title: "Run a packer check", description: "Open the sample in Detect It Easy (DIE) which tells us the entropy which reveals whether we're looking at a packed/obfuscated binary, which changes how much static analysis will actually reveal." },
           { title: "Check section entropy", description: "In DIE, look at each section's entropy. Anything above ~7.0 (out of a max of 8) usually means packed or encrypted content, and tells you dynamic analysis will matter more than static here." },
           { title: "Pull printable strings", description: "Run strings -n 8 PandaBanker.bin | grep -i http to surface any hardcoded URLs quickly. Widen the grep (or drop it) if you want to also catch registry paths, mutex names, or config-looking strings." },
-          { title: "Review the import table", description: "Back in PEStudio or DIE, check the Imports tab for anything that hints at capability: SetWindowsHookEx and GetForegroundWindow together are a strong keylogger signal, for example." },
-          { title: "Cross-reference strings against imports", description: "If a suspicious string (like \"keylogger\") lines up with a matching import, that's a much stronger indicator than either alone — note both in your findings." }
         ],
         findings: [
           { type: "import", value: "VirtualProtect", note: "used for process injection" },
@@ -740,7 +738,7 @@ const labs = [
         title: "Debug with x32dbg to see what gets decrypted",
         commands: ["# Command: bp VirtualProtect", "# Command: bp VirtualAlloc", "# Command: bp IsDebuggerPresent", "# Command: bp CreateToolhelp32Snapshot", "# Command: bp Process32First", "# Command: bp Process32Next", "# Command: bp CreateFileW", "# Command: bp CreateFileA", "# Command: bp CreateProcessW", "# Command: bp CreateProcessInternalW"],
         howTo: [
-          { title: "Set breakpoint settings", description: " Navigate to x32dbg → Options → Preferences → Untick System breakpoints -> Untick TLS callback. Leave entry breakpoints checked." },
+          { title: "Set breakpoint settings", description: " Navigate to x32dbg → Options → Preferences → Untick System breakpoints → Untick TLS callback. Leave entry breakpoints checked." },
           { title: "Open the sample in x32dbg", description: "Click on the yellow folder to open the sample in x32dbg." },
           { title: "Add breakpoints to key imports", description:"There should be an input field at the bottom of x32dbg. Type in the name of the import you want to add a breakpoint on, e.g. bp VirtualProtect, and hit enter. See the recommended breakpoints below." },
         ],
@@ -763,7 +761,7 @@ const labs = [
     iocs: [
       ""
     ],
-    conclusion: "Block the C2 domain via firewall and the hash. Write a YARA rule on the import combination (SetWindowsHookEx + GetForegroundWindow + GetWindowText + missing signature)."
+    conclusion: "Undetermined."
   },
   {
     title: "Case #001: .NET malware",
@@ -801,7 +799,7 @@ const labs = [
         title: "Strings, imports and packing check",
         commands: ["die netmalware.exe", "strings -n 8 netmalware.exe | grep -i http"],
         howTo: [
-          { title: "Run a packer check first", description: "Open the sample in Detect It Easy (DIE) before anything else — it tells you quickly whether you're looking at a packed/obfuscated binary, which changes how much static analysis will actually reveal." },
+          { title: "Run a packer check first", description: "Open the sample in Detect It Easy (DIE), which has an entropy section to identify whether you're looking at a packed/obfuscated binary, which changes how much static analysis will actually reveal." },
           { title: "Check section entropy", description: "In DIE, look at each section's entropy. Anything above ~7.0 (out of a max of 8) usually means packed or encrypted content, and tells you dynamic analysis will matter more than static here." },
           { title: "Pull printable strings", description: "Run strings -n 8 netmalware.exe | grep -i http to surface any hardcoded URLs quickly. Widen the grep (or drop it) if you want to also catch registry paths, mutex names, or config-looking strings." },
           { title: "Review the import table", description: "Back in PEStudio or DIE, check the Imports tab for anything that hints at capability: SetWindowsHookEx and GetForegroundWindow together are a strong keylogger signal, for example." },
