@@ -179,13 +179,22 @@
   details.lab-card summary::after {
     content: "+";
     position: absolute;
-    top: 18px;
-    right: 24px;
-    color: var(--sage-deep);
-    font-size: 20px;
+    top: 16px;
+    right: 20px;
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    background: color-mix(in srgb, var(--pink) 45%, #fff);
+    color: var(--pink-deep);
+    font-size: 18px;
+    font-weight: 700;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
   }
   details.lab-card[open] summary::after { content: "–"; }
-  .lab-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 30px; }
+  .lab-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 30px; padding-right: 52px; }
   .lab-title { margin: 0; font-size: 18px; padding-right: 20px; }
   .lab-date-col { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; flex-shrink: 0; }
   .lab-date { font-size: 12px; color: var(--brown-soft); white-space: nowrap; }
@@ -275,6 +284,34 @@
     justify-content: center;
     margin-top: 2px;
   }
+  .verdict-item {
+    margin-top: 4px;
+    padding: 16px;
+    border-radius: 14px;
+    background: var(--cream-2);
+  }
+  .verdict-item .step-num.verdict-num {
+    background: transparent;
+    width: 28px; height: 28px;
+  }
+  .verdict-item .step-text h4 {
+    font-family: 'Quicksand', sans-serif;
+    font-size: 16px;
+  }
+  .verdict-item .observation-label { font-size: 13px; }
+  .verdict-item.verdict-malicious { background: var(--danger-bg); box-shadow: inset 0 0 0 1px var(--danger); }
+  .verdict-item.verdict-malicious .observation-label,
+  .verdict-item.verdict-malicious .step-text h4,
+  .verdict-item.verdict-malicious .verdict-num { color: var(--danger); }
+  .verdict-item.verdict-suspicious { background: var(--butter); box-shadow: inset 0 0 0 1px var(--butter-deep); }
+  .verdict-item.verdict-suspicious .observation-label,
+  .verdict-item.verdict-suspicious .step-text h4,
+  .verdict-item.verdict-suspicious .verdict-num { color: var(--butter-deep); }
+  .verdict-item.verdict-benign { background: var(--sage); box-shadow: inset 0 0 0 1px var(--sage-deep); }
+  .verdict-item.verdict-benign .observation-label,
+  .verdict-item.verdict-benign .step-text h4,
+  .verdict-item.verdict-benign .verdict-num { color: var(--sage-deep); }
+  .verdict-item .observation-list { color: var(--brown); }
   .step-text { flex: 1; min-width: 0; }
   .step-text-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 4px; }
   .step-text h4 { margin: 0; font-size: 14.5px; }
@@ -500,7 +537,7 @@
     </div>
 
     <div class="controls">
-      <input type="text" id="search-input" placeholder="Search title, tags, IOCs, tools…">
+      <input type="text" id="search-input" placeholder="Search title, tags, IOCs, tools, hashes…">
       <select id="verdict-filter">
         <option value="">All verdicts</option>
         <option value="malicious">Malicious</option>
@@ -1003,6 +1040,8 @@ function labMatchesFilter(lab) {
       ...(lab.tags || []),
       ...(lab.iocs || []),
       ...((defaultEnvironment && defaultEnvironment.tools) || []),
+      (lab.sample && lab.sample.md5) || "",
+      (lab.sample && lab.sample.sha1) || "",
       (lab.sample && lab.sample.sha256) || "",
       ...((lab.mitre || []).map(function (m) { return m.id + " " + m.name; }))
     ].join(" ").toLowerCase();
@@ -1023,7 +1062,7 @@ function populateTagFilter() {
   });
 }
 
-function stepHtml(s, i) {
+function stepHtml(s, i, labVerdict) {
   const detailHtml = (s.detail && s.detail.length) ?
     '<ul class="step-detail-list">' + s.detail.map(function (d) { return '<li>' + esc(d) + '</li>'; }).join("") + '</ul>' : '';
 
@@ -1078,6 +1117,28 @@ function stepHtml(s, i) {
 
   const artifactsHtml = (s.artifacts && s.artifacts.length) ?
     '<p class="step-artifacts"><strong>Save as you go:</strong> ' + s.artifacts.map(esc).join("; ") + '</p>' : '';
+
+  const isVerdict = s.phase === "Verdict";
+  const verdictClass = isVerdict ? "verdict-" + (labVerdict || "neutral") : "";
+
+  if (isVerdict) {
+    return '<li class="step-item verdict-item ' + verdictClass + '">' +
+      '<span class="step-num verdict-num"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 12.5 9.5 18 20 6"></polyline></svg></span>' +
+      '<div class="step-text">' +
+        '<div class="step-text-head"><h4>' + esc(s.title) + '</h4></div>' +
+        detailHtml +
+        howToHtml +
+        commandsHtml +
+        expectedHtml +
+        findingsHtml +
+        warningHtml +
+        (s.observation ? '<p class="observation-label">Verdict reasoning</p><ul class="observation-list">' +
+          (Array.isArray(s.observation) ? s.observation : [s.observation]).map(function (o) { return '<li>' + formatInline(o) + '</li>'; }).join("") +
+        '</ul>' : '') +
+        artifactsHtml +
+      '</div>' +
+    '</li>';
+  }
 
   return '<li class="step-item">' +
     '<span class="step-num">' + (i + 1) + '</span>' +
@@ -1142,7 +1203,7 @@ function renderLabs() {
         lab.prerequisites.map(function (p) { return '<li>' + esc(p) + '</li>'; }).join("") +
       '</ul>' : '';
 
-    const stepsHtml = (lab.steps || []).map(stepHtml).join("");
+    const stepsHtml = (lab.steps || []).map(function (s, si) { return stepHtml(s, si, lab.verdict); }).join("");
 
     const mitreHtml = (lab.mitre && lab.mitre.length) ?
       '<div class="mitre-list">' + lab.mitre.map(function (m) {
@@ -1182,7 +1243,7 @@ function renderLabs() {
         (stepsHtml ? '<div class="section-label">Step-by-step walk-through</div><ol class="step-list">' + stepsHtml + '</ol>' : '') +
         (mitreHtml ? '<div class="section-label">MITRE ATT&amp;CK mapping</div>' + mitreHtml : '') +
         (iocsHtml ? '<div class="section-label">Indicators of compromise</div>' + iocsHtml : '') +
-        (lab.conclusion ? '<div class="section-label">Conclusion</div><div class="conclusion-box">' + esc(lab.conclusion) + '</div>' : '') +
+        (lab.conclusion ? '<div class="section-label">Recommendations</div><div class="conclusion-box">' + esc(lab.conclusion) + '</div>' : '') +
         refsHtml +
       '</div>' +
     '</details>';
