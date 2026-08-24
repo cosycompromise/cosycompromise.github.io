@@ -609,6 +609,10 @@
     fileType         - e.g. "PE32 executable (Windows)"
     fileSize         - e.g. "184 KB"
     md5, sha1, sha256 - hashes (leave "" if you don't have one)
+    imphash          - import hash (leave "" if you don't have one).
+                  Useful for clustering samples that share the same
+                  import table even when their file hashes differ —
+                  e.g. across repacked or minimally-patched variants.
     deliveryVector   - how you obtained/received it, e.g. "email attachment"
     acquisitionNotes - optional: where/how a replicator could get an
                   equivalent sample, without hosting the file yourself
@@ -677,6 +681,91 @@ const defaultEnvironment = {
 
 const labs = [
   {
+    title: "Case #002: PandaBanker (work in progress)",
+    date: "24 Aug 2026",
+    verdict: "undetermined",
+    tags: ["Windows", "PE32", "Process Hijacking", "jp2launcher.exe", "Java application"],
+    summary: "Malware that carries out process hijacking.",
+    environmentNote: "N/A",
+    sample: {
+      fileType: "PE32 executable (Windows, GUI)",
+      fileSize: "148 KB",
+      md5: "eda0a631619abb9c38c6436d511bc67e",
+      sha1: "ad707dab79853ae56ea4eba9b7d47251f8ca3a07",
+      sha256: "3057a943c961aee976a3b30ceafc42faa2bf157c7718008e6013875d251c072d",
+      imphash: "30ECC5F6EA80E0B6334A092C382B9B61",
+    },
+    steps: [
+      {
+        phase: "Triage",
+        title: "Use HashMyFiles or sha256sum to get a hash, do a hash lookup and first look",
+        commands: ["sha256sum PandaBanker.bin", "# paste hash into VirusTotal"],
+        howTo: [
+          { title: "Hash the sample", description: "Run sha256sum PandaBanker.bin (or use HashMyFiles if you're on FlareVM)." },
+          { title: "Check it against VirusTotal", description: "Paste the SHA-256 into VirusTotal's search rather than uploading the file itself." },
+          { title: "Compare the detection ratio", description: "A high ratio (here 52/65) is a strong first signal" },
+        ],
+        observation: [
+          "52/65 AV engines flagged it as malicious on VirusTotal.",
+        ]
+      },
+      {
+        phase: "Static analysis",
+        title: "Strings, imports and packing check",
+        commands: ["die PandaBanker.bin", "strings -n 8 PandaBanker.bin | grep -i http"],
+        howTo: [
+          { title: "Eyeball it in PEStudio", description: "Load the binary into PEStudio for a first look. PEStudio can help identify suspicious characteristics." },
+          { title: "Run a packer check", description: "Open the sample in Detect It Easy (DIE) which tells us the entropy which reveals whether we're looking at a packed/obfuscated binary, which changes how much static analysis will actually reveal." },
+          { title: "Check section entropy", description: "In DIE, look at each section's entropy. Anything above ~7.0 (out of a max of 8) usually means packed or encrypted content, and tells you dynamic analysis will matter more than static here." },
+          { title: "Pull printable strings", description: "Run strings -n 8 PandaBanker.bin | grep -i http to surface any hardcoded URLs quickly. Widen the grep (or drop it) if you want to also catch registry paths, mutex names, or config-looking strings." },
+          { title: "Review the import table", description: "Back in PEStudio or DIE, check the Imports tab for anything that hints at capability: SetWindowsHookEx and GetForegroundWindow together are a strong keylogger signal, for example." },
+          { title: "Cross-reference strings against imports", description: "If a suspicious string (like \"keylogger\") lines up with a matching import, that's a much stronger indicator than either alone — note both in your findings." }
+        ],
+        findings: [
+          { type: "import", value: "VirtualProtect", note: "used for process injection" },
+          { type: "import", value: "VirtualAlloc", note: "used for process injection" },
+          { type: "import", value: "GetCurrentProcessId", note: "used for process discovery" },
+          { type: "import", value: "GetDesktopWindow", note: "used for window enumeration" },
+          { type: "import", value: "ShellExecuteA", note: "used for process execution through API" },
+          { type: "import", value: "WriteFile", note: "used for file I/O operations" }
+        ],
+        observation: [
+          "Detect It Easy showed the .text section was likely unpacked with an entropy of 6.4.",
+          "PEStudio showed the binary was a Java application with multiple suspicious flags, was self-modifying, and the file's actual name is jp2launcher.exe.",
+          "The import table reveals several functions associated with process injection and memory manipulation."
+        ]
+      },
+      {
+        phase: "Dynamic analysis",
+        title: "Debug with x32dbg to see what gets decrypted",
+        commands: ["# Command: bp VirtualProtect", "# Command: bp VirtualAlloc", "# Command: bp IsDebuggerPresent", "# Command: bp CreateToolhelp32Snapshot", "# Command: bp Process32First", "# Command: bp Process32Next", "# Command: bp CreateFileW", "# Command: bp CreateFileA", "# Command: bp CreateProcessW", "# Command: bp CreateProcessInternalW"],
+        howTo: [
+          { title: "Set breakpoint settings", description: " Navigate to x32dbg → Options → Preferences → Untick System breakpoints -> Untick TLS callback. Leave entry breakpoints checked." },
+          { title: "Open the sample in x32dbg", description: "Click on the yellow folder to open the sample in x32dbg." },
+          { title: "Add breakpoints to key imports", description:"There should be an input field at the bottom of x32dbg. Type in the name of the import you want to add a breakpoint on, e.g. bp VirtualProtect, and hit enter. See the recommended breakpoints below." },
+        ],
+        observation: [
+          "N/a`",
+      ]
+      },
+      {
+        phase: "Verdict",
+        title: "Classify and contain",
+        commands: [],
+        observation: [
+          ""
+        ]
+      }
+    ],
+    mitre: [
+      { id: "T01", name: "N/A" },
+    ],
+    iocs: [
+      ""
+    ],
+    conclusion: "Block the C2 domain via firewall and the hash. Write a YARA rule on the import combination (SetWindowsHookEx + GetForegroundWindow + GetWindowText + missing signature)."
+  },
+  {
     title: "Case #001: .NET malware",
     date: "13 Aug 2026",
     verdict: "malicious",
@@ -697,10 +786,10 @@ const labs = [
         title: "Use HashMyFiles or sha256sum to get a hash, do a hash lookup and first look",
         commands: ["sha256sum netmalware.exe", "# paste hash into VirusTotal"],
         howTo: [
-          { title: "Hash the sample", description: "Run sha256sum netmalware.exe (or use HashMyFiles if you're on FlareVM) before anything else touches the file — you want a hash you can trust wasn't altered by later analysis steps." },
-          { title: "Check it against VirusTotal", description: "Paste the SHA-256 into VirusTotal's search rather than uploading the file itself, so you don't hand a possibly-unique sample to every vendor's cloud before you've decided it's worth sharing." },
-          { title: "Compare the detection ratio", description: "A high ratio (here 61/70) is a strong first signal, but don't stop there — a low or zero ratio just means it's new or targeted, not that it's clean." },
-          { title: "Eyeball it in PEStudio", description: "Load the binary into PEStudio for a first pass: check the icon against what it's pretending to be, look for a missing or invalid digital signature, and skim the import table for anything unusual before moving to deeper static analysis." }
+          { title: "Hash the sample", description: "Run sha256sum netmalware.exe (or use HashMyFiles if you're on FlareVM) before anything else touches the file as you want a hash you can trust wasn't altered by later analysis steps." },
+          { title: "Check it against VirusTotal", description: "Paste the SHA-256 into VirusTotal's search rather than uploading the file itself" },
+          { title: "Compare the detection ratio", description: "A high ratio (here 61/70) is a strong first signal, but note that a low ratio doesn't necessarily mean the sample is benign." },
+          { title: "Eyeball it in PEStudio", description: "Load the binary into PEStudio for a first pass: check the icon against what it's pretending to be, look for a missing or invalid digital certificate, and skim the import table for anything unusual before moving to deeper static analysis." }
         ],
         observation: [
           "61/70 AV engines flagged it as malicious on VirusTotal.",
@@ -1043,6 +1132,7 @@ function labMatchesFilter(lab) {
       (lab.sample && lab.sample.md5) || "",
       (lab.sample && lab.sample.sha1) || "",
       (lab.sample && lab.sample.sha256) || "",
+      (lab.sample && lab.sample.imphash) || "",
       ...((lab.mitre || []).map(function (m) { return m.id + " " + m.name; }))
     ].join(" ").toLowerCase();
     if (!haystack.includes(q)) return false;
@@ -1195,7 +1285,8 @@ function renderLabs() {
       metaRow("Acquisition", sample.acquisitionNotes),
       metaRow("MD5", sample.md5),
       metaRow("SHA-1", sample.sha1),
-      metaRow("SHA-256", sample.sha256)
+      metaRow("SHA-256", sample.sha256),
+      metaRow("Imphash", sample.imphash)
     ].join("");
 
     const prereqHtml = (lab.prerequisites && lab.prerequisites.length) ?
