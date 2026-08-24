@@ -688,7 +688,7 @@ const labs = [
     summary: "Malware that carries out process hijacking.",
     environmentNote: "N/A",
     sample: {
-      fileType: "PE32 executable (Windows, GUI)",
+      fileType: "PE32 executable (Windows, Java)",
       fileSize: "148 KB",
       md5: "eda0a631619abb9c38c6436d511bc67e",
       sha1: "ad707dab79853ae56ea4eba9b7d47251f8ca3a07",
@@ -741,10 +741,13 @@ const labs = [
           { title: "Set breakpoint settings", description: " Navigate to x32dbg → Options → Preferences → Untick System breakpoints → Untick TLS callback. Leave entry breakpoints checked." },
           { title: "Open the sample in x32dbg", description: "Click on the yellow folder to open the sample in x32dbg." },
           { title: "Add breakpoints to key imports", description:"There should be an input field at the bottom of x32dbg. Type in the name of the import you want to add a breakpoint on, e.g. bp VirtualProtect, and hit enter. See the recommended breakpoints below." },
+          { title: "Run the sample", description: "Click on the right-facing arrow next to the stop button to run the sample. The debugger will break at the first breakpoint you set. First stop should be at VirtualProtect, look at the MSdocs for it and compare it with the bottom left window in x32dbg to see what permissions it's setting." },
         ],
         observation: [
-          "N/a`",
-      ]
+          "For `VirtualProtect`, `flNewProtect` permissions are set to `PAGE_EXECUTE_READWRITE`, which is a strong indicator of process injection.",
+          "Stopping at `CreateFileW` shows the files the program is trying to read, possibly for anti-analysis purpose. Therefore, uninstall any it checks for. One of the files it checks for is `NPF_NdiswanIP`, (i.e. `WinPcap/Wireshark`)",
+          "Running again and stopping at `CreateToolhelp32Snapshot` (used for process enumeration) shows the program is looking for `Wireshark`, but we've already uninstalled that.",
+        ]
       },
       {
         phase: "Verdict",
@@ -771,7 +774,7 @@ const labs = [
     summary: ".NET malware compiled with VB.NET. Turned out to be a keylogger / infostealer, exfiltrating usernames and passwords from mail clients and browsers to a hardcoded URL.",
     environmentNote: "Used dnSpy and de4dot as this was a .NET sample.",
     sample: {
-      fileType: "PE32 executable (Windows, GUI)",
+      fileType: "PE32 executable (Windows, .NET)",
       fileSize: "484 KB",
       md5: "dc4200ac514006f084ead7f83b84c928",
       sha1: "52e8f04d6b495d238f1a49283a10e2acc053123b",
