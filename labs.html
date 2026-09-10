@@ -768,9 +768,9 @@ const labs = [
         commands: ["# Command: bp VirtualProtect", "# Command: bp VirtualAlloc", "# Command: bp CreateProcessW", "# Command: bp CreateToolhelp32Snapshot", "# Command: bp CreateFileW", "# Command: bp CreateFileA", "# Command: bp WriteProcessMemory", "# Command: bp NtWriteVirtualMemory", "# Command: bp CreateRemoteThread", "# Command: bp NtResumeThread"],
         observation: [
           "When continuing to debug the original sample, we see that it's about to run the dropped the sample in memory. Therefore, let's start debugging the dropped sample in x32dbg to see what it does.",
-          "Run System Informer as administrator in the background",
           "You'll notice it's no longer doing anti-analysis checks, as it already did so in the original sample.",
-          "Stopping at `CreateProcessInternalW`, we see it's trying to write into the memory of `C:\\Windows\\SysWOW64\\svchost.exe`",
+          "Run System Informer as administrator in the background",
+          "In x32dbg Stopping at `CreateProcessInternalW`, we see it's trying to write into the memory of `C:\\Windows\\SysWOW64\\svchost.exe`",
           "Stopping at `WriteProcessMemory`, we see it's writing into the memory of `svchost.exe`. Reviewing the MSdocs for `WriteProcessMemory`, we see the 2nd argument is `lpBaseAddress`, the address in the target process where the data will be written. In our case it's set to `0x100000`",
           "In System Informer, open the `svchost.exe` process and go to the memory tab. In the memory tab, we can see that the memory at `0x100000` (might be different for you) is set to `RWX` (Read, Write, Execute). If you double click on the memory address, we can see the memory contents, which is currently empty as we haven't yet called `WriteProcessMemory`.",
           "In x32dbg, we can see that the 3rd argument of `WriteProcessMemory` is `lpBuffer`. If you right click the 3rd argument and select 'Follow DWORD in current dump', we can see the magic bytes, 'MZ', indicating this is an executable file.",
