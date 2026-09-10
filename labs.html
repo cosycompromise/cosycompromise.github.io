@@ -689,7 +689,7 @@ const labs = [
     environmentNote: "N/A",
     sample: {
       fileType: "PE32 executable (Windows, Java)",
-      fileSize: "148 KB",
+      fileSize: "145 KB",
       md5: "eda0a631619abb9c38c6436d511bc67e",
       sha1: "ad707dab79853ae56ea4eba9b7d47251f8ca3a07",
       sha256: "3057a943c961aee976a3b30ceafc42faa2bf157c7718008e6013875d251c072d",
@@ -735,18 +735,48 @@ const labs = [
       },
       {
         phase: "Dynamic analysis",
-        title: "Debug with x32dbg to see what gets decrypted",
+        title: "Debug with x32dbg to see what the sample does",
         commands: ["# Command: bp VirtualProtect", "# Command: bp VirtualAlloc", "# Command: bp IsDebuggerPresent", "# Command: bp CreateToolhelp32Snapshot", "# Command: bp Process32First", "# Command: bp Process32Next", "# Command: bp CreateFileW", "# Command: bp CreateFileA", "# Command: bp CreateProcessW", "# Command: bp CreateProcessInternalW"],
         howTo: [
           { title: "Set breakpoint settings", description: " Navigate to x32dbg → Options → Preferences → Untick System breakpoints → Untick TLS callback. Leave entry breakpoints checked." },
           { title: "Open the sample in x32dbg", description: "Click on the yellow folder to open the sample in x32dbg." },
           { title: "Add breakpoints to key imports", description:"There should be an input field at the bottom of x32dbg. Type in the name of the import you want to add a breakpoint on, e.g. bp VirtualProtect, and hit enter. See the recommended breakpoints below." },
-          { title: "Run the sample", description: "Click on the right-facing arrow next to the stop button to run the sample. The debugger will break at the first breakpoint you set. First stop should be at VirtualProtect, look at the MSdocs for it and compare it with the bottom left window in x32dbg to see what permissions it's setting." },
+          { title: "Run the sample", description: "Click on the right-facing arrow next to the stop button to run the sample. The debugger will break at the first breakpoint you set. First stop should be at VirtualProtect, look at the MSdocs for it and compare it with the bottom right window in x32dbg to see what permissions it's setting." },
+          { title: "Understanding the x32dbg view", description:"In x32dbg, the main window shows the disassembly of the code. In order to see the arguments of a function e.g., VirtualProtect, you can look at the bottom right window. If you look at the MSdocs for VirtualProtect, you'll see it takes 4 arguments, and the bottom right window shows you the values of those arguments. In the case of VirtualProtect, the 3rd argument is the new permissions, which you should see as 0x40 in the window. But if you check MSdocs, `0x40` corresponds to `PAGE_EXECUTE_READWRITE`." }
         ],
         observation: [
-          "For `VirtualProtect`, `flNewProtect` permissions are set to `PAGE_EXECUTE_READWRITE`, which is a strong indicator of process injection.",
-          "Stopping at `CreateFileW` shows the files the program is trying to read, possibly for anti-analysis purpose. Therefore, uninstall any it checks for. One of the files it checks for is `NPF_NdiswanIP`, (i.e. `WinPcap/Wireshark`)",
-          "Running again and stopping at `CreateToolhelp32Snapshot` (used for process enumeration) shows the program is looking for `Wireshark`, but we've already uninstalled that.",
+          "For `VirtualProtect`, `flNewProtect` permissions are set to `PAGE_EXECUTE_READWRITE`, which is an indicator of process injection.",
+          "Stopping at `CreateFileW` shows the files the program is trying to determine if they exist, possibly for anti-analysis purpose. Therefore, uninstall any it checks for. One of the files it checks for is `NPF_NdiswanIP`, (i.e. `Npcap/Wireshark`). Uninstall both via the Control Panel",
+          "Running again and stopping at `CreateToolhelp32Snapshot` (used to see what processes are actively running, compared to them just existing on the system). If you have any of the programs running, make sure to close them.",
+          "Stopping at `CreateFileW`, we see the path `C:\\Users\\Lilou\\AppData\\Roaming\\npm\\node_modules\\obfuscator-io-deobfuscator\\node_modules\\@babel\\traverse\\lib\\path\\inference\\package.oda`. Navigate to the same path (shortcut `WIN + X + R`, %appdata%). Let's see what other files it drops here.",
+          "We see it drop an exe called `webpackEntry.exe` in the same path along with some other random files. The exe is originally created empty, so let's see if it's written by setting `bp WriteFile` and continuing to run.",
+          "We can see the file does get written to and is now 145 KB (same as the original file)."
+        ]
+      },
+      {
+        phase: "Triage",
+        title: "Use HashMyFiles or md5sum to get a hash of the dropped file, and compare with the original sample",
+        commands: ["md5sum webpackEntry.exe", ],
+        observation: [
+          "Both files have the same MD5 hash: `eda0a631619abb9c38c6436d511bc67e`.",
+          "This indicates that this is a self-replicating malware that drops a copy of itself, which is a common technique used by malware to evade detection and analysis."
+        ]
+      },
+      {
+        phase: "Dynamic analysis",
+        title: "Debug the dropped sample in x32dbg to see what it does",
+        commands: ["# Command: bp VirtualProtect", "# Command: bp VirtualAlloc", "# Command: bp CreateProcessW", "# Command: bp CreateToolhelp32Snapshot", "# Command: bp CreateFileW", "# Command: bp CreateFileA", "# Command: bp WriteProcessMemory", "# Command: bp NtWriteVirtualMemory", "# Command: bp CreateRemoteThread", "# Command: bp NtResumeThread"],
+        observation: [
+          "When continuing to debug the original sample, we see that it's about to run the dropped the sample in memory. Therefore, let's start debugging the dropped sample in x32dbg to see what it does.",
+          "Run System Informer as administrator in the background",
+          "You'll notice it's no longer doing anti-analysis checks, as it already did so in the original sample.",
+          "Stopping at `CreateProcessInternalW`, we see it's trying to write into the memory of `C:\\Windows\\SysWOW64\\svchost.exe`",
+          "Stopping at `WriteProcessMemory`, we see it's writing into the memory of `svchost.exe`. Reviewing the MSdocs for `WriteProcessMemory`, we see the 2nd argument is `lpBaseAddress`, the address in the target process where the data will be written. In our case it's set to `0x100000`",
+          "In System Informer, open the `svchost.exe` process and go to the memory tab. In the memory tab, we can see that the memory at `0x100000` (might be different for you) is set to `RWX` (Read, Write, Execute). If you double click on the memory address, we can see the memory contents, which is currently empty as we haven't yet called `WriteProcessMemory`.",
+          "In x32dbg, we can see that the 3rd argument of `WriteProcessMemory` is `lpBuffer`. If you right click the 3rd argument and select 'Follow DWORD in current dump', we can see the magic bytes, 'MZ', indicating this is an executable file.",
+          "Continue to run until we hit `NtResumeThread`, which is the last step in the process injection. In System Informer, we can see that `svchost.exe` is now running. Double click on that same memory address, and we can see the magic bytes, `MZ`, so the file has been written to.",
+          "Right click on the memory address and save as `svchost_0x100000.bin`. ",
+
         ]
       },
       {
