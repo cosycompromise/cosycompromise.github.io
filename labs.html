@@ -768,15 +768,46 @@ const labs = [
         commands: ["# Command: bp VirtualProtect", "# Command: bp VirtualAlloc", "# Command: bp CreateProcessW", "# Command: bp CreateToolhelp32Snapshot", "# Command: bp CreateFileW", "# Command: bp CreateFileA", "# Command: bp WriteProcessMemory", "# Command: bp NtWriteVirtualMemory", "# Command: bp CreateRemoteThread", "# Command: bp NtResumeThread"],
         observation: [
           "When continuing to debug the original sample, we see that it's about to run the dropped the sample in memory. Therefore, let's start debugging the dropped sample in x32dbg to see what it does.",
-          "You'll notice it's no longer doing anti-analysis checks, as it already did so in the original sample.",
+          "When debugging the dropped sample, you'll notice it's no longer doing anti-analysis checks, as it already did so in the original sample.",
           "Run System Informer as administrator in the background",
           "In x32dbg Stopping at `CreateProcessInternalW`, we see it's trying to write into the memory of `C:\\Windows\\SysWOW64\\svchost.exe`",
-          "Stopping at `WriteProcessMemory`, we see it's writing into the memory of `svchost.exe`. Reviewing the MSdocs for `WriteProcessMemory`, we see the 2nd argument is `lpBaseAddress`, the address in the target process where the data will be written. In our case it's set to `0x100000`",
-          "In System Informer, open the `svchost.exe` process and go to the memory tab. In the memory tab, we can see that the memory at `0x100000` (might be different for you) is set to `RWX` (Read, Write, Execute). If you double click on the memory address, we can see the memory contents, which is currently empty as we haven't yet called `WriteProcessMemory`.",
+          "Stopping at `WriteProcessMemory`, we see it's writing into the memory of `svchost.exe`. Reviewing the MSdocs for `WriteProcessMemory`, we see the 2nd argument is `lpBaseAddress`, the address in the target process where the data will be written. In our case it's set to `0x2E00000`, which may show up as the third entry in the bottom right window of x32dbg.",
+          "In System Informer, right click the `svchost.exe` process, navigate to properties, and go to the memory tab. In the memory tab, we can see that the memory at `0x2E00000` (might be a different address for you) is set to `RWX` (Read, Write, Execute). If you double click on the memory address, we can see the memory contents, which is currently empty as we haven't yet called `WriteProcessMemory`.",
           "In x32dbg, we can see that the 3rd argument of `WriteProcessMemory` is `lpBuffer`. If you right click the 3rd argument and select 'Follow DWORD in current dump', we can see the magic bytes, 'MZ', indicating this is an executable file.",
-          "Continue to run until we hit `NtResumeThread`, which is the last step in the process injection. In System Informer, we can see that `svchost.exe` is now running. Double click on that same memory address, and we can see the magic bytes, `MZ`, so the file has been written to.",
-          "Right click on the memory address and save as `svchost_0x100000.bin`. ",
-
+          "Continue to run until we hit CreateRemoteThread or `NtResumeThread`, which is the last step in the process injection. In System Informer, we can see that `svchost.exe` is now running. Double click on that same memory address, and we can see the magic bytes, `MZ`, so the file has been written to.",
+          "Right click on the memory address and save as `svchost_0x2E00000.bin`. ",
+        ]
+      },
+      {
+        phase: "Static analysis",
+        title: "Fixing section alignment, unmapping, fixing IAT and re-basing",
+        howTo: [
+          { title: "Possible corruption", description: "Since the memory dump was done from memory, it has possible corruption in the section alignments, and section headers. Import address tables are not properly set up. Duplicate the file before we proceed." },
+          { title: "PE-bear", description: "If you try to drag and drop the file in PE-bear, it won't recognise it due to possible corruption. Load it anyway."},
+          { title: "HxD", description:"Drag and drop the dump file into Hex Editors. You should see the magic bytes `MZ` there, as well as that it's a PE file."},
+          { title: "Fixing section alignment", description: "Scroll down to offset 0x210 as that's where the first section header should be. Follow the steps below."}
+        ],
+        observation: [
+          "If you see null bytes in the front or middle of .text, we need to change it so that .text is at the start. Note that null bytes are represented as 00 in the hex display and also look like `.`.",
+          "Select the relevant null bytes, right click and cut. (DO NOT DELETE THE DOT IN FRONT OF text - just the null bytes)",
+          "Now the entire binary is short by the number of bytes you cut, in this case 3. The best place to put it back is just before the end of the section header",
+          "Look at the byte before @.rsrc where it is null. Paste the null bytes there. (You should see 40 in the hex display, past it just before that)",
+          "Save and close.",
+        ]
+      },
+      {
+        phase: "Static analysis",
+        title: "Fixing section alignment, unmapping, fixing IAT and re-basing",
+        howTo: [
+          { title: "PE-bear", description: "Open PE-bear again and you should now see all the section headers." },
+          { title: "Unmapping", description: "Now we need to unmap the section headers so navigate to the `Section Hdrs` tab. We need to make sure the raw and virtual address are the same. Copy what's in the virtual address over to the raw address."},
+          { title: "Fixing the raw size", description:"Now we need to fix the raw size. The raw size is taken from the result of the previous section's raw address - the current section's raw address. Leave the final section's raw size as is. Therefore, you are calculating from the fourth section's raw address - the third section's raw address to get the third section's raw size."},
+          { title: "Virtual size", description: "Virtual size should be the same as raw size. So, copy the raw size into the virtual size."},
+          { title: "Imports tab", description: "The imports address table should also be fixed if we have properly done the section alignment. If it were all red, you know you've done the section alignment incorrectly, specifically where you pasted the null bytes."},
+          { title: "Optional Hdr", description: "Go to the Optional Hdr tab and look at the Image Base value. Set it to be the same as the base address of the svchost binary file. In this case, the base address is 0x2E00000."},
+          { title: "Re-dumping the file", description: "We can now dump the file. Right click on the file name below the tope left menu buttons →  Save the executable as... →  svc_fixed. It will be saved as an exe."},
+          { title: "IDA", description: "Ida → New → svc_fixed.exe → Open → Click on Portable executable → OK. Check imports are looking good. Entry point should before SetErrorMode and ExitProcess. Double click on the function it calls. We can see all the API call it makes so we were successful in fixing the memory dump."},
+          { title: "Re-start triage and analysis", description: "In IDA, go to View → Open subviews → Strings. We can see all the strings although some are encrypted. Restart analysis of the dumped exe."}
         ]
       },
       {
