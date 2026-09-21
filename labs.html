@@ -807,8 +807,31 @@ const labs = [
           { title: "Optional Hdr", description: "Go to the Optional Hdr tab and look at the Image Base value. Set it to be the same as the base address of the svchost binary file. In this case, the base address is 0x2E00000."},
           { title: "Re-dumping the file", description: "We can now dump the file. Right click on the file name below the tope left menu buttons →  Save the executable as... →  svc_fixed. It will be saved as an exe."},
           { title: "IDA", description: "Ida → New → svc_fixed.exe → Open → Click on Portable executable → OK. Check imports are looking good. Entry point should before SetErrorMode and ExitProcess. Double click on the function it calls. We can see all the API call it makes so we were successful in fixing the memory dump."},
-          { title: "Re-start triage and analysis", description: "In IDA, go to View → Open subviews → Strings. We can see all the strings although some are encrypted. Restart analysis of the dumped exe."}
         ]
+      },
+      {
+        phase: "Static analysis",
+        title: "Strings, imports and packing check",
+        commands: ["die PandaBanker.bin", "strings -n 8 PandaBanker.bin | grep -i http"],
+        howTo: [
+          { title: "Eyeball it in PEStudio", description: "Load the binary into PEStudio for a first look. PEStudio can help identify suspicious characteristics." },
+          { title: "Run a packer check", description: "Open the sample in Detect It Easy (DIE) which tells us the entropy which reveals whether we're looking at a packed/obfuscated binary, which changes how much static analysis will actually reveal." },
+          { title: "Check section entropy", description: "In DIE, look at each section's entropy. Anything above ~7.0 (out of a max of 8) usually means packed or encrypted content, and tells you dynamic analysis will matter more than static here." },
+          { title: "Pull printable strings", description: "Run strings -n 8 PandaBanker.bin | grep -i http to surface any hardcoded URLs quickly. Widen the grep (or drop it) if you want to also catch registry paths, mutex names, or config-looking strings." },
+        ],
+        findings: [
+          { type: "import", value: "CryptImportKey / CryptExportKey", note: "imports a hardcoded/embedded RSA public key (to encrypt the session key) or exports the session key after wrapping it" },
+          { type: "import", value: "CryptEncrypt", note: "main call that encrypts file data. You'll typically see this in a loop that reads a file, calls this, then writes back the ciphertext" },
+          { type: "import", value: "CryptDecrypt", note: "but shows up in decryptor/proof-of-decryption tools, or if the malware self-decrypts a packed stage"},
+          { type: "import", value: "CryptGenKey", note: "generates a session key for symmetric encryption used to bulk-encrypt files" },
+          { type: "import", value: "CryptAcquireContext", note: "acquires a handle to a cryptographic service provider (CSP) for key generation and encryption" },
+          { type: "import", value: "CryptImportPublicKeyInfo", note: ""},
+          { type: "import", value: "FindFirstFile / FindNextFile", note: "used to enumerate files in a directory, often to find targets for encryption" },
+          { type: "import", value: "vssadmin", note: "used to delete shadow copies on Windows, preventing easy recovery of encrypted files" },          
+        ],
+        observation: [
+          "This looks like ransomware based on the CryptoAPI calls and suspiciousstrings. MD5Hash:`33e1710da1063663118dde344347f19a`",
+      ]
       },
       {
         phase: "Verdict",
