@@ -681,7 +681,7 @@ const defaultEnvironment = {
 
 const labs = [
   {
-    title: "Case #002: PandaBanker (work in progress)",
+    title: "Case #002: PandaBanker",
     date: "24 Aug 2026",
     verdict: "undetermined",
     tags: ["Windows", "PE32", "Process Hijacking", "jp2launcher.exe", "Java application"],
@@ -838,7 +838,7 @@ const labs = [
         title: "Classify and contain",
         commands: [],
         observation: [
-          ""
+          "Confirmed ransomware payload which uses process injection to run in the context of svchost.exe."
         ]
       }
     ],
@@ -846,9 +846,9 @@ const labs = [
       { id: "T01", name: "N/A" },
     ],
     iocs: [
-      ""
+      "eda0a631619abb9c38c6436d511bc67e"
     ],
-    conclusion: "Undetermined."
+    conclusion: "Malicious."
   },
   {
     title: "Case #001: .NET malware",
