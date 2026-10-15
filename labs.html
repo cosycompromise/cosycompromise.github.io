@@ -682,6 +682,1518 @@ const defaultEnvironment = {
 const labs = [
   {
     title: "Case #002: PandaBanker",
+    date: "15 Oct 2026",
+    verdict: "malicious",
+    tags: ["Windows", "PE32", "Process Hijacking", "jp2launcher.exe", "Java application", "Ransomware"],
+    summary: "Malware that carries out process hijacking targeting svchost.exe and detonates a ransomware payload.",
+    environmentNote: "N/A",
+    sample: {
+      fileType: "PE32 executable (Windows, Java)",
+      fileSize: "145 KB",
+      md5: "eda0a631619abb9c38c6436d511bc67e",
+      sha1: "ad707dab79853ae56ea4eba9b7d47251f8ca3a07",
+      sha256: "3057a943c961aee976a3b30ceafc42faa2bf157c7718008e6013875d251c072d",
+      imphash: "30ECC5F6EA80E0B6334A092C382B9B61",
+    },
+    steps: [
+      {
+        phase: "Triage",
+        title: "Use HashMyFiles or sha256sum to get a hash, do a hash lookup on VirusTotal",
+        commands: ["sha256sum PandaBanker.bin", "# paste hash into VirusTotal"],
+        howTo: [
+          { title: "Hash the sample", description: "Run sha256sum PandaBanker.bin (or use HashMyFiles if you're on FlareVM)." },
+          { title: "Check it against VirusTotal", description: "Paste the SHA-256 into VirusTotal's search rather than uploading the file itself." },
+          { title: "Compare the detection ratio", description: "A high ratio (here 52/65) is a strong first signal" },
+        ],
+        observation: [
+          "52/65 AV engines flagged it as malicious on VirusTotal.",
+        ]
+      },
+      {
+        phase: "Static analysis",
+        title: "Strings, imports and packing check",
+        commands: ["die PandaBanker.bin", "strings -n 8 PandaBanker.bin | grep -i http"],
+        howTo: [
+          { title: "Eyeball it in PEStudio", description: "Load the binary into PEStudio for a first look. PEStudio can help identify suspicious characteristics." },
+          { title: "Run a packer check", description: "Open the sample in Detect It Easy (DIE) which tells us the entropy which reveals whether we're looking at a packed/obfuscated binary, which changes how much static analysis will actually reveal." },
+          { title: "Check section entropy", description: "In DIE, look at each section's entropy. Anything above ~7.0 (out of a max of 8) usually means packed or encrypted content, and tells you dynamic analysis will matter more than static here." },
+          { title: "Pull printable strings", description: "Run strings -n 8 PandaBanker.bin | grep -i http to surface any hardcoded URLs quickly. Widen the grep (or drop it) if you want to also catch registry paths, mutex names, or config-looking strings." },
+        ],
+        findings: [
+          { type: "import", value: "VirtualProtect", note: "used for process injection" },
+          { type: "import", value: "VirtualAlloc", note: "used for process injection" },
+          { type: "import", value: "GetCurrentProcessId", note: "used for process discovery" },
+          { type: "import", value: "GetDesktopWindow", note: "used for window enumeration" },
+          { type: "import", value: "ShellExecuteA", note: "used for process execution through API" },
+          { type: "import", value: "WriteFile", note: "used for file I/O operations" }
+        ],
+        observation: [
+          "Detect It Easy showed the .text section was likely unpacked with an entropy of 6.4.",
+          "PEStudio showed the binary was a Java application with multiple suspicious flags, was self-modifying, and the file's actual name is jp2launcher.exe.",
+          "The import table reveals several functions associated with process injection and memory manipulation."
+        ]
+      },
+      {
+        phase: "Dynamic analysis",
+        title: "Debug with x32dbg to see what the sample does",
+        commands: ["# Command: bp VirtualProtect", "# Command: bp VirtualAlloc", "# Command: bp IsDebuggerPresent", "# Command: bp CreateToolhelp32Snapshot", "# Command: bp Process32First", "# Command: bp Process32Next", "# Command: bp CreateFileW", "# Command: bp CreateFileA", "# Command: bp CreateProcessW", "# Command: bp CreateProcessInternalW"],
+        howTo: [
+          { title: "Set breakpoint settings", description: " Navigate to x32dbg → Options → Preferences → Untick System breakpoints → Untick TLS callback. Leave entry breakpoints checked." },
+          { title: "Open the sample in x32dbg", description: "Click on the yellow folder to open the sample in x32dbg." },
+          { title: "Add breakpoints to key imports", description:"There should be an input field at the bottom of x32dbg. Type in the name of the import you want to add a breakpoint on, e.g. bp VirtualProtect, and hit enter. See the recommended breakpoints below." },
+          { title: "Run the sample", description: "Click on the right-facing arrow next to the stop button to run the sample. The debugger will break at the first breakpoint you set. First stop should be at VirtualProtect, look at the MSdocs for it and compare it with the bottom right window in x32dbg to see what permissions it's setting." },
+          { title: "Understanding the x32dbg view", description:"In x32dbg, the main window shows the disassembly of the code. In order to see the arguments of a function e.g., VirtualProtect, you can look at the bottom right window. If you look at the MSdocs for VirtualProtect, you'll see it takes 4 arguments, and the bottom right window shows you the values of those arguments. In the case of VirtualProtect, the 3rd argument is the new permissions, which you should see as 0x40 in the window. But if you check MSdocs, `0x40` corresponds to `PAGE_EXECUTE_READWRITE`." }
+        ],
+        observation: [
+          "For `VirtualProtect`, `flNewProtect` permissions are set to `PAGE_EXECUTE_READWRITE`, which is an indicator of process injection.",
+          "Stopping at `CreateFileW` shows the files the program is trying to determine if they exist, possibly for anti-analysis purpose. Therefore, uninstall any it checks for. One of the files it checks for is `NPF_NdiswanIP`, (i.e. `Npcap/Wireshark`). Uninstall both via the Control Panel",
+          "Running again and stopping at `CreateToolhelp32Snapshot` (used to see what processes are actively running, compared to them just existing on the system). If you have any of the programs running, make sure to close them.",
+          "Stopping at `CreateFileW`, we see the path `C:\\Users\\Lilou\\AppData\\Roaming\\npm\\node_modules\\obfuscator-io-deobfuscator\\node_modules\\@babel\\traverse\\lib\\path\\inference\\package.oda`. Navigate to the same path (shortcut `WIN + X + R`, %appdata%). Let's see what other files it drops here.",
+          "We see it drop an exe called `webpackEntry.exe` in the same path along with some other random files. The exe is originally created empty, so let's see if it's written by setting `bp WriteFile` and continuing to run.",
+          "We can see the file does get written to and is now 145 KB (same as the original file)."
+        ]
+      },
+      {
+        phase: "Triage",
+        title: "Use HashMyFiles or md5sum to get a hash of the dropped file, and compare with the original sample",
+        commands: ["md5sum webpackEntry.exe", ],
+        observation: [
+          "Both files have the same MD5 hash: `eda0a631619abb9c38c6436d511bc67e`.",
+          "This indicates that this is a self-replicating malware that drops a copy of itself, which is a common technique used by malware to evade detection and analysis."
+        ]
+      },
+      {
+        phase: "Dynamic analysis",
+        title: "Debug the dropped sample in x32dbg to see what it does",
+        commands: ["# Command: bp VirtualProtect", "# Command: bp VirtualAlloc", "# Command: bp CreateProcessW", "# Command: bp CreateToolhelp32Snapshot", "# Command: bp CreateFileW", "# Command: bp CreateFileA", "# Command: bp WriteProcessMemory", "# Command: bp NtWriteVirtualMemory", "# Command: bp CreateRemoteThread", "# Command: bp NtResumeThread"],
+        observation: [
+          "When continuing to debug the original sample, we see that it's about to run the dropped the sample in memory. Therefore, let's start debugging the dropped sample in x32dbg to see what it does.",
+          "When debugging the dropped sample, you'll notice it's no longer doing anti-analysis checks, as it already did so in the original sample.",
+          "Run System Informer as administrator in the background",
+          "In x32dbg Stopping at `CreateProcessInternalW`, we see it's trying to write into the memory of `C:\\Windows\\SysWOW64\\svchost.exe`",
+          "Stopping at `WriteProcessMemory`, we see it's writing into the memory of `svchost.exe`. Reviewing the MSdocs for `WriteProcessMemory`, we see the 2nd argument is `lpBaseAddress`, the address in the target process where the data will be written. In our case it's set to `0x2E00000`, which may show up as the third entry in the bottom right window of x32dbg.",
+          "In System Informer, right click the `svchost.exe` process, navigate to properties, and go to the memory tab. In the memory tab, we can see that the memory at `0x2E00000` (might be a different address for you) is set to `RWX` (Read, Write, Execute). If you double click on the memory address, we can see the memory contents, which is currently empty as we haven't yet called `WriteProcessMemory`.",
+          "In x32dbg, we can see that the 3rd argument of `WriteProcessMemory` is `lpBuffer`. If you right click the 3rd argument and select 'Follow DWORD in current dump', we can see the magic bytes, 'MZ', indicating this is an executable file.",
+          "Continue to run until we hit CreateRemoteThread or `NtResumeThread`, which is the last step in the process injection. In System Informer, we can see that `svchost.exe` is now running. Double click on that same memory address, and we can see the magic bytes, `MZ`, so the file has been written to.",
+          "Right click on the memory address and save as `svchost_0x2E00000.bin`. ",
+        ]
+      },
+      {
+        phase: "Static analysis",
+        title: "Fixing section alignment, unmapping, fixing IAT and re-basing",
+        howTo: [
+          { title: "Possible corruption", description: "Since the memory dump was done from memory, it has possible corruption in the section alignments, and section headers. Import address tables are not properly set up. Duplicate the file before we proceed." },
+          { title: "PE-bear", description: "If you try to drag and drop the file in PE-bear, it won't recognise it due to possible corruption. Load it anyway."},
+          { title: "HxD", description:"Drag and drop the dump file into Hex Editors. You should see the magic bytes `MZ` there, as well as that it's a PE file."},
+          { title: "Fixing section alignment", description: "Scroll down to offset 0x210 as that's where the first section header should be. Follow the steps below."}
+        ],
+        observation: [
+          "If you see null bytes in the front or middle of .text, we need to change it so that .text is at the start. Note that null bytes are represented as 00 in the hex display and also look like `.`.",
+          "Select the relevant null bytes, right click and cut. (DO NOT DELETE THE DOT IN FRONT OF text - just the null bytes)",
+          "Now the entire binary is short by the number of bytes you cut, in this case 3. The best place to put it back is just before the end of the section header",
+          "Look at the byte before @.rsrc where it is null. Paste the null bytes there. (You should see 40 in the hex display, past it just before that)",
+          "Save and close.",
+        ]
+      },
+      {
+        phase: "Static analysis",
+        title: "Fixing section alignment, unmapping, fixing IAT and re-basing",
+        howTo: [
+          { title: "PE-bear", description: "Open PE-bear again and you should now see all the section headers." },
+          { title: "Unmapping", description: "Now we need to unmap the section headers so navigate to the `Section Hdrs` tab. We need to make sure the raw and virtual address are the same. Copy what's in the virtual address over to the raw address."},
+          { title: "Fixing the raw size", description:"Now we need to fix the raw size. The raw size is taken from the result of the previous section's raw address - the current section's raw address. Leave the final section's raw size as is. Therefore, you are calculating from the fourth section's raw address - the third section's raw address to get the third section's raw size."},
+          { title: "Virtual size", description: "Virtual size should be the same as raw size. So, copy the raw size into the virtual size."},
+          { title: "Imports tab", description: "The imports address table should also be fixed if we have properly done the section alignment. If it were all red, you know you've done the section alignment incorrectly, specifically where you pasted the null bytes."},
+          { title: "Optional Hdr", description: "Go to the Optional Hdr tab and look at the Image Base value. Set it to be the same as the base address of the svchost binary file. In this case, the base address is 0x2E00000."},
+          { title: "Re-dumping the file", description: "We can now dump the file. Right click on the file name below the tope left menu buttons →  Save the executable as... →  svc_fixed. It will be saved as an exe."},
+          { title: "IDA", description: "Ida → New → svc_fixed.exe → Open → Click on Portable executable → OK. Check imports are looking good. Entry point should before SetErrorMode and ExitProcess. Double click on the function it calls. We can see all the API call it makes so we were successful in fixing the memory dump."},
+        ]
+      },
+      {
+        phase: "Static analysis",
+        title: "Strings, imports and packing check",
+        commands: ["die PandaBanker.bin", "strings -n 8 PandaBanker.bin | grep -i http"],
+        howTo: [
+          { title: "Eyeball it in PEStudio", description: "Load the binary into PEStudio for a first look. PEStudio can help identify suspicious characteristics." },
+          { title: "Run a packer check", description: "Open the sample in Detect It Easy (DIE) which tells us the entropy which reveals whether we're looking at a packed/obfuscated binary, which changes how much static analysis will actually reveal." },
+          { title: "Check section entropy", description: "In DIE, look at each section's entropy. Anything above ~7.0 (out of a max of 8) usually means packed or encrypted content, and tells you dynamic analysis will matter more than static here." },
+          { title: "Pull printable strings", description: "Run strings -n 8 PandaBanker.bin | grep -i http to surface any hardcoded URLs quickly. Widen the grep (or drop it) if you want to also catch registry paths, mutex names, or config-looking strings." },
+        ],
+        findings: [
+          { type: "import", value: "CryptImportKey / CryptExportKey", note: "imports a hardcoded/embedded RSA public key (to encrypt the session key) or exports the session key after wrapping it" },
+          { type: "import", value: "CryptEncrypt", note: "main call that encrypts file data. You'll typically see this in a loop that reads a file, calls this, then writes back the ciphertext" },
+          { type: "import", value: "CryptDecrypt", note: "but shows up in decryptor/proof-of-decryption tools, or if the malware self-decrypts a packed stage"},
+          { type: "import", value: "CryptGenKey", note: "generates a session key for symmetric encryption used to bulk-encrypt files" },
+          { type: "import", value: "CryptAcquireContext", note: "acquires a handle to a cryptographic service provider (CSP) for key generation and encryption" },
+          { type: "import", value: "CryptImportPublicKeyInfo", note: ""},
+          { type: "import", value: "FindFirstFile / FindNextFile", note: "used to enumerate files in a directory, often to find targets for encryption" },
+          { type: "import", value: "vssadmin", note: "used to delete shadow copies on Windows, preventing easy recovery of encrypted files" },          
+        ],
+        observation: [
+          "This looks like ransomware based on the CryptoAPI calls and suspiciousstrings. MD5Hash:`33e1710da1063663118dde344347f19a`",
+      ]
+      },
+      {
+        phase: "Verdict",
+        title: "Classify and contain",
+        commands: [],
+        observation: [
+          "Confirmed ransomware payload which uses process injection to run in the context of svchost.exe."
+        ]
+      }
+    ],
+    mitre: [
+      { id: "T01", name: "N/A" },
+    ],
+    iocs: [
+      "eda0a631619abb9c38c6436d511bc67e"
+    ],
+    conclusion: "Malicious."
+  },
+  {
+    title: "Case #001: .NET malware",
+    date: "13 Aug 2026",
+    verdict: "malicious",
+    tags: ["Windows", "PE32", ".NET", "keylogger", "infostealer"],
+    summary: ".NET malware compiled with VB.NET. Turned out to be a keylogger / infostealer, exfiltrating usernames and passwords from mail clients and browsers to a hardcoded URL.",
+    environmentNote: "Used dnSpy and de4dot as this was a .NET sample.",
+    sample: {
+      fileType: "PE32 executable (Windows, .NET)",
+      fileSize: "484 KB",
+      md5: "dc4200ac514006f084ead7f83b84c928",
+      sha1: "52e8f04d6b495d238f1a49283a10e2acc053123b",
+      sha256: "a850de0705c0f6095910aa1d5ed0e73a49581aa7427fcfaf2ff5144e93b047c1",
+      deliveryVector: "Unknown"
+    },
+    steps: [
+      {
+        phase: "Triage",
+        title: "Use HashMyFiles or sha256sum to get a hash, do a hash lookup and first look",
+        commands: ["sha256sum netmalware.exe", "# paste hash into VirusTotal"],
+        howTo: [
+          { title: "Hash the sample", description: "Run sha256sum netmalware.exe (or use HashMyFiles if you're on FlareVM) before anything else touches the file as you want a hash you can trust wasn't altered by later analysis steps." },
+          { title: "Check it against VirusTotal", description: "Paste the SHA-256 into VirusTotal's search rather than uploading the file itself" },
+          { title: "Compare the detection ratio", description: "A high ratio (here 61/70) is a strong first signal, but note that a low ratio doesn't necessarily mean the sample is benign." },
+          { title: "Eyeball it in PEStudio", description: "Load the binary into PEStudio for a first pass: check the icon against what it's pretending to be, look for a missing or invalid digital certificate, and skim the import table for anything unusual before moving to deeper static analysis." }
+        ],
+        observation: [
+          "61/70 AV engines flagged it as malicious on VirusTotal.",
+          "PEStudio showed the binary had no digital certificate."
+        ]
+      },
+      {
+        phase: "Static analysis",
+        title: "Strings, imports and packing check",
+        commands: ["die netmalware.exe", "strings -n 8 netmalware.exe | grep -i http"],
+        howTo: [
+          { title: "Run a packer check first", description: "Open the sample in Detect It Easy (DIE), which has an entropy section to identify whether you're looking at a packed/obfuscated binary, which changes how much static analysis will actually reveal." },
+          { title: "Check section entropy", description: "In DIE, look at each section's entropy. Anything above ~7.0 (out of a max of 8) usually means packed or encrypted content, and tells you dynamic analysis will matter more than static here." },
+          { title: "Pull printable strings", description: "Run strings -n 8 netmalware.exe | grep -i http to surface any hardcoded URLs quickly. Widen the grep (or drop it) if you want to also catch registry paths, mutex names, or config-looking strings." },
+          { title: "Review the import table", description: "Back in PEStudio or DIE, check the Imports tab for anything that hints at capability: SetWindowsHookEx and GetForegroundWindow together are a strong keylogger signal, for example." },
+          { title: "Cross-reference strings against imports", description: "If a suspicious string (like \"keylogger\") lines up with a matching import, that's a much stronger indicator than either alone — note both in your findings." }
+        ],
+        findings: [
+          { type: "url", value: "hxxp://ziraat-helpdesk[.]com/components/com_content/limpopapa/" },
+          { type: "string", value: "keylogger" },
+          { type: "string", value: "&keystrokestyped=" },
+          { type: "string", value: "sdrowssaP" },
+          { type: "string", value: "&windowtitle=" },
+          { type: "import", value: "SetWindowsHookEx", note: "used to install a low-level input hook" },
+          { type: "import", value: "GetForegroundWindow", note: "commonly used to log which window keystrokes belong to" },
+          { type: "import", value: "GetWindowText", note: "used to retrieve the text of a window" }
+        ],
+        observation: [
+          "Detect It Easy showed the .text section was packed with high entropy of 7.9.",
+          "Strings and imports (some tabulated above) reference browsers, usernames and passwords.",
+          "These are all signs of a keylogger / infostealer."
+        ]
+      },
+      {
+        phase: "Static / Dynamic analysis",
+        title: "Decompile and debug with dnSpy to see what gets decrypted",
+        commands: ["# dnSpy (x86) → File → Open → dotmalware.exe"],
+        howTo: [
+          { title: "Open the sample in dnSpy (x86)", description: "Launch the 32-bit build of dnSpy (matches a 32-bit .NET binary) and go File → Open File → select dotmalware.exe to load it into the assembly tree." },
+          { title: "Skim Main for implemented methods", description: "Click on the filename and it should tell you the entry point / Main which you can click on. Click through the methods referenced in Main to see which are actually implemented versus stubs. Backspace jumps back to wherever you were in the decompiler view, so you can dig into a method and quickly return to Main." },
+          { title: "Set breakpoints around the decryption", description: "The interesting logic lives in ReadMail(). Set a breakpoint on the first line of ReadMail(), and another on the first line of RSMDecrypt() (the method that actually decrypts the embedded data - note you need to double click it to open the method), so execution pauses right where the plaintext becomes available." },
+          { title: "Run and step through", description: "Click Start to launch the sample under the debugger. When it hits your breakpoints, use Step Over (not Step Into) to move through RSMDecrypt() one line at a time — watch the live output panel at the bottom of dnSpy as you go." },
+          { title: "Step to the return and inspect array2", description: "Keep stepping over until you reach the return array2 line — at that point array2 holds the decrypted data in memory, before it gets used or cleared." },
+          { title: "Dump array2 to a file", description: "Right-click array2 → Show In Memory Window → Memory 1. Right-click inside the Memory window → Save Selection → save as dump.bin." },
+          { title: "Identify the dumped data", description: "Open dump.bin in PEStudio and double click the Description field — this is how you confirm whether it's a legitimate tool being abused, rather than custom malicious code." }
+        ],
+        observation: [
+          "Opening the file in dnSpy reveals the filename is actually `ziraat_limpi.exe`",
+          "Reviewing ClipboardLogging() reveals exactly how the malware obtains clipboard data and uses the SendLog() method to send the `logType`, `WindowTitle`, `KeystrokesTyped`, `Application`, `Host`, `Username`, `Password`, and `ClipboardText` data to a link (likely the established C2 server)",
+          "Given the fact that multiple methods are unimplemented, this is likely a product of malware-as-a-service (MaaS) or a builder kit, where the malware author is selling a pre-built binary to customers who can then configure it with their own C2 server and other options.",
+          "Looking at PasswordRecovery() reveals a method named 'RecoverMail()', which then leads to 'ReadMail()', where we see references to a file named `\\Mails.txt`",
+          "Obtaining the decrypted memory dump from RSMDecrypt() and the magic bytes, `4D 5A` (\"MZ\"), reveals this is an executable. Opening it in PEStudio shows us this is a legitimate tool being abused called 'Mail PassView' by NirSoft, which reveals the passwords and account info for popular email clients."
+        ]
+      },
+      {
+        phase: "Static / Dynamic analysis",
+        title: "Deobfuscate with de4dot and re-analyse in dnSpy",
+        commands: ["cd path\\to\\.NET_Malware.bin", "de4dot .NET_Malware.bin"],
+        howTo: [
+          { title: "Locate the binary", description: "de4dot is a command-line tool used to deobfuscate .NET assemblies, so open a terminal and cd into the folder containing the sample, e.g. netmalware.exe." },
+          { title: "Run de4dot against it", description: "It automatically detects the obfuscator in use and strips as much of it as it can, without you needing to specify which one." },
+          { title: "Locate the cleaned output", description: "de4dot writes its result alongside the original as netmalware-cleaned.exe — the original file is left untouched." },
+          { title: "Open the cleaned binary in dnSpy", description: "Load netmalware-cleaned.exe into dnSpy instead of the original. Renamed/deobfuscated classes are usually far easier to read here." },
+          { title: "Look for the deobfuscated classes", description: "You should see class names like GClass0 that weren't legible in the original obfuscated build — de4dot can't always recover meaningful names, but it does clean up control-flow obfuscation and string encryption enough to make the decompiled code readable." }
+        ],
+        observation: [
+          "de4dot successfully deobfuscated the sample, producing `netmalware-cleaned.exe`.",
+          "A newly-visible class, `GClass0`, appeared which wasn't readable in the original obfuscated build.",
+          "Analysing `GClass0` in dnSpy revealed that this was the part of the malware responsible for obtaining browser data.",
+          "If we debug like we did for the original obfuscated build, and dumping the memory from array2 in RSMDecrypt(), we can see that the decrypted data is actually a legitimate tool called 'WebBrowserPassView' by NirSoft, which reveals the passwords for popular browsers."
+        ]
+      },
+      {
+        phase: "Dynamic analysis",
+        title: "Detonate with network simulated using FakeNET",
+        commands: ["# snapshot the VM, then run:", "netmalware.exe", "# observe with Process Monitor + System Informer + Wireshark running"],
+        howTo: [
+          { title: "Scope Procmon to your process", description: "Filter → Filter... and add: Process Name is netmalware.exe, Include. This cuts out OS/background noise so every event you see belongs to the sample. Add any child process names (or PIDs) as you see them spawn." },
+          { title: "Isolate registry persistence", description: "Add filters: Operation is RegSetValue, Include and Operation is RegCreateKey, Include. Scan the Path column for anything containing \\Run, \\RunOnce, \\Services, or \\Schedule\\TaskCache." },
+          { title: "Isolate file drops", description: "Add filters: Operation is WriteFile, Include and Operation is CreateFile, Include. Watch for writes into %TEMP%, %APPDATA%, %ProgramData%, or the Startup folder." },
+          { title: "Catch process spawning", description: "Add filter: Operation is Process Create, Include. Double-click a spawn event to see its Command Line — this is usually where the real payload logic shows up." },
+          { title: "Catch DLL sideloading", description: "Add filter: Operation is Load Image, Include. Check for DLLs loading from %TEMP% or other non-standard paths instead of System32/SysWOW64." },
+          { title: "Flag network prep", description: "Add filters: Operation is TCP Connect, Include and Operation is UDP Send, Include. Cross-reference the destination IP/port against the Wireshark capture to confirm which process made the call." }
+        ],
+        observation: [
+          "We see it enumerate my malware analysis toolsuite to detect if it's being watched and likely alter its behaviour or not run the payload at all",
+          "We see it write to `HKLM\\SYSTEM\\CurrentControlSet\\Services\\Tcpip\\Parameters`, but this isn't inherently malicious",
+          "In Process Monitor, we can see the command line arguments `/stext C:\\ProgramData\\Mails.txt` and `/stext C:\\ProgramData\\Browsers.txt` with child PID 3916 (only observable when double clicking the details > Process).",
+          "Wireshark didn't capture anything relevant, nor did FakeNET. Procmon did not show any TCP Connect or UDP Send events, so the sample didn't actually make any network calls in this run. It might have altered its behaviour after enumerating our tools"
+        ]
+      },
+      {
+        phase: "Dynamic analysis",
+        title: "Inspect the live process with System Informer",
+        commands: [],
+        howTo: [
+          { title: "Launch it before you detonate", description: "Start System Informer as Administrator before running the sample, so it's already watching when the process (and any children) appear in the tree view." },
+          { title: "Find the process in the tree", description: "Locate the sample in the process tree once it's running. The parent-child relationship shown here is a quick way to confirm what Procmon's Process Create events told you." },
+          { title: "Check its Handles", description: "Right-click the process → Properties → Handles tab. Look for open handles to things like window stations, desktops, or mutexes — a hook-related handle here lines up nicely with a SetWindowsHookEx import found in static analysis. Note this only shows handles open at the moment you look: quick open-write-close file activity (like periodic log writes) usually won't be caught here even if Procmon already confirmed it happened — Handles is a live snapshot, not a history." },
+          { title: "Check its Memory", description: "Properties → Memory tab. Scan for regions marked PAGE_EXECUTE_READWRITE — RWX memory at runtime is a common sign of a packer unpacking itself or code injection, even when the on-disk file looked packed but static." },
+          { title: "Check loaded Modules", description: "Properties → Modules tab lists every DLL the process has loaded and the path it loaded from. Anything loading from %TEMP% or another non-standard folder instead of System32/SysWOW64 is worth a closer look — the same sideloading check you'd do in Procmon's Load Image events, but browsable in one place." },
+          { title: "Check its Network tab", description: "Properties → Network tab shows active TCP/UDP connections owned by this specific PID. Use it to confirm a connection you saw in Wireshark actually belongs to your sample and not to some unrelated background process." }
+        ],
+        observation: [
+          "No handles to `Mails.txt`, or `Browsers.txt` were visible at inspection time — these writes were already confirmed via Procmon, so this just means the process opens, writes, and closes those files quickly rather than holding them open continuously.",
+          "RWX memory regions were found, but nothing of note here. Navigating to Options -> Strings  and filtering for 'http' shows the hardcoded URL from static analysis but more info `hxxp://ziraat-helpdesk[.]com/components/com_content/limpopapa/post.php?type=clipboard&machinename=REDACTED&windowtitle=&clipboardtext=%TEMP%, %APPDATA%, %ProgramData%&machinetime=13:57`, indicating it communicates with a remote server and would have POSTed my clipboard contents and machine information to the C2 server. This likely would have been seen in beaconing connections had the sample not detected my toolsuite and altered its behaviour.",
+          "The Modules tab confirmed no DLLs were loaded from non-standard paths."
+        ]
+      },
+      {
+        phase: "Verdict",
+        title: "Classify and contain",
+        commands: [],
+        observation: [
+          "Confirmed keylogger/infostealer behaviour. We see it enumerate browsers, attempt to access passwords, usernames, clipboard content, and send to its C2 server.",
+          "Dropper malware that uses legitimate software by NirSoft to obtain accounts and passwords for popular mail clients and browsers.",
+          "Seems to not function properly in my lab environment, likely due to the sample detecting my toolsuite and altering its behaviour as an anti-analysis technique."
+        ]
+      }
+    ],
+    mitre: [
+      { id: "T1041", name: "Exfiltration Over C2 Channel" },
+      { id: "T1114", name: "Email Collection" },
+      { id: "T1115", name: "Clipboard Data" },
+      { id: "T1056.001", name: "Input Capture: Keylogging" },
+      { id: "T1056.003", name: "Input Capture: Credential API Hooking" }
+    ],
+    iocs: [
+      "hxxp://ziraat-helpdesk[.]com (defanged)",
+      "ziraat_limpi.exe",
+      "WebBrowserPassView by NirSoft",
+      "Mail PassView by NirSoft",
+      "/stext C:\\ProgramData\\Mails.txt",
+      "/stext C:\\ProgramData\\Browsers.txt"
+    ],
+    conclusion: "Block the C2 domain via firewall and the hash. Write a YARA rule on the import combination (SetWindowsHookEx + GetForegroundWindow + GetWindowText + missing signature)."
+  },
+  {
+    title: "Example #002: The invoice that wasn't",
+    date: "3 Aug 2026",
+    verdict: "malicious",
+    tags: ["Windows", "PE32", "phishing attachment"],
+    summary: "A .exe disguised as a PDF invoice, delivered by email. Turned out to be a small downloader fetching a second-stage payload.",
+    environmentNote: "Also used Ghidra 11.1 for a closer look at the downloader routine, on top of the default toolset.",
+    sample: {
+      fileType: "PE32 executable (Windows, GUI)",
+      fileSize: "184 KB",
+      md5: "5f4dcc3b5aa765d61d8327deb882cf99",
+      sha1: "2fd4e1c67a2d28fced849ee1bb76e7391b93eb12",
+      sha256: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b85",
+      deliveryVector: "Email attachment named invoice_08234.pdf.exe"
+    },
+    steps: [
+      {
+        phase: "Triage",
+        title: "Hash lookup and first look",
+        commands: ["sha256sum invoice_08234.pdf.exe", "# paste hash into VirusTotal"],
+        observation: [
+          "32/70 AV engines flagged it as malicious.",
+          "PEStudio showed the icon mismatched the real Adobe Reader icon.",
+          "The binary had no digital signature."
+        ]
+      },
+      {
+        phase: "Static analysis",
+        title: "Strings, imports and packing check",
+        commands: ["diec invoice_08234.pdf.exe", "strings -n 8 invoice_08234.pdf.exe | grep -i http"],
+        findings: [
+          { type: "import", value: "URLDownloadToFileA", note: "fetches the second-stage payload over HTTP" },
+          { type: "import", value: "WinExec", note: "launches the dropped file after download" },
+          { type: "import", value: "CreateProcessA" },
+          { type: "url", value: "hxxp://185.203.xx.xx/update.bin" }
+        ],
+        observation: [
+          "Detect It Easy showed no known packer, but entropy on one section was elevated (~7.1).",
+          "Strings and imports (tabulated above) point to downloader behaviour."
+        ]
+      },
+      {
+        phase: "Dynamic analysis",
+        title: "Detonate with network simulated",
+        commands: ["# snapshot the VM, then run:", "invoice_08234.pdf.exe", "# observe with Process Monitor + Wireshark running"],
+        observation: [
+          "Process Monitor showed a file written to %TEMP%\\svc_update.exe within 4 seconds of execution.",
+          "Wireshark captured an HTTP GET to the hardcoded URL, answered by INetSim.",
+          "The process then launched the dropped file."
+        ]
+      },
+      {
+        phase: "Verdict",
+        title: "Classify and contain",
+        commands: [],
+        observation: [
+          "Confirmed downloader/dropper behaviour matching a generic PE downloader pattern.",
+          "No legitimate reason for the observed network call or dropped executable."
+        ]
+      }
+    ],
+    mitre: [
+      { id: "T1566.001", name: "Phishing: Spearphishing Attachment" },
+      { id: "T1105", name: "Ingress Tool Transfer" },
+      { id: "T1204.002", name: "User Execution: Malicious File" }
+    ],
+    iocs: [
+      "hxxp://185.203.xx.xx/update.bin (defanged)",
+      "SHA-256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b85",
+      "Dropped file: %TEMP%\\svc_update.exe"
+    ],
+    conclusion: "Blocked the C2 domain and hash at the email gateway, and wrote a YARA rule on the import combination (URLDownloadToFileA + WinExec + missing signature). Next time I'd also check the PDF icon resource directly rather than relying on visual comparison."
+  },
+  {
+    title: "Example #001: A quiet little macro",
+    date: "20 Jul 2026",
+    verdict: "suspicious",
+    tags: ["Office", "macro", "VBA"],
+    summary: "A Word document with an auto-executing macro. Behaviour pointed at a dropper, but the second-stage payload never landed during analysis.",
+    environmentNote: "Swapped the default toolset for oletools (olevba) and CyberChef for this one, since it's an Office macro rather than a PE binary. INetSim had no HTTP handler configured for the observed domain, so the request failed to resolve fully.",
+    sample: {
+      fileType: "Microsoft Word document (.docm)",
+      fileSize: "58 KB",
+      md5: "",
+      sha1: "",
+      sha256: "",
+      deliveryVector: "Shared internally as a 'candidate CV' test file"
+    },
+    steps: [
+      {
+        phase: "Triage",
+        title: "Metadata-only inspection",
+        commands: ["olevba --no-deobfuscate candidate_cv.docm"],
+        observation: [
+          "AutoOpen and Shell function references were flagged.",
+          "A suspicious level of string concatenation was found inside the macro module."
+        ]
+      },
+      {
+        phase: "Static analysis",
+        title: "Deobfuscate the VBA",
+        commands: ["olevba --deobfuscate candidate_cv.docm > macro_deobf.txt"],
+        observation: "The concatenated strings reassembled into a PowerShell command with -EncodedCommand, pointing at an external domain."
+      },
+      {
+        phase: "Dynamic analysis",
+        title: "Open with macros enabled, network simulated",
+        commands: ["# open candidate_cv.docm in Word, enable content", "# watch with Process Monitor"],
+        observation: [
+          "The macro spawned powershell.exe with the encoded command.",
+          "The outbound request failed to resolve on INetSim (no HTTP handler set up for that domain).",
+          "No second-stage payload was retrieved."
+        ]
+      },
+      {
+        phase: "Verdict",
+        title: "Classify with caveats",
+        commands: [],
+        observation: "Behaviour is consistent with a macro dropper, but without the second-stage payload the full intent couldn't be confirmed."
+      }
+    ],
+    mitre: [
+      { id: "T1204.002", name: "User Execution: Malicious File" },
+      { id: "T1059.001", name: "Command and Scripting Interpreter: PowerShell" },
+      { id: "T1027", name: "Obfuscated Files or Information" }
+    ],
+    iocs: [],
+    conclusion: "Marked suspicious rather than confirmed malicious since the payload couldn't be retrieved. Kept the sample and the domain on a watch list, and set up an INetSim HTTP handler for that domain pattern so a follow-up run can go further."
+  }
+];
+
+function chipClassForVerdict(v) {
+  if (v === "malicious") return "pink";
+  if (v === "suspicious") return "butter";
+  return "sage";
+}
+
+function esc(v) {
+  if (v === undefined || v === null) return "";
+  return String(v)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+// Escapes text but converts `backtick-wrapped` segments into inline <code>,
+// so observation bullets (etc) can call out command-line args, paths,
+// registry keys, etc without them getting lost in a wall of prose.
+function formatInline(v) {
+  if (v === undefined || v === null) return "";
+  const parts = String(v).split("`");
+  return parts.map(function (part, idx) {
+    return idx % 2 === 1 ? '<code class="inline-code">' + esc(part) + '</code>' : esc(part);
+  }).join("");
+}
+
+function slugify(title, fallbackIndex) {
+  const s = String(title || "").toLowerCase().trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "");
+  return s || ("case-" + fallbackIndex);
+}
+
+function metaRow(label, value) {
+  if (!value) return "";
+  return '<div><strong>' + label + ':</strong> ' + esc(value) + '</div>';
+}
+
+function renderDefaultEnvironment() {
+  const el = document.getElementById("env-section");
+  const env = defaultEnvironment || {};
+  const envHtml = (env.os || (env.tools && env.tools.length) || env.network || env.vmSpecs) ?
+    '<div class="env-box">' +
+      (env.os ? '<div class="env-row"><strong>VM / OS:</strong> ' + esc(env.os) + '</div>' : '') +
+      (env.vmSpecs ? '<div class="env-row"><strong>VM specs:</strong> ' + esc(env.vmSpecs) + '</div>' : '') +
+      (env.tools && env.tools.length ? '<div class="env-row"><strong>Tools used:</strong> ' + env.tools.map(esc).join(", ") + '</div>' : '') +
+      (env.network ? '<div class="env-row"><strong>Network setup:</strong> ' + esc(env.network) + '</div>' : '') +
+    '</div>' : '';
+
+  el.innerHTML =
+    '<h2>My default lab setup</h2>' +
+    '<p class="env-sub">Applies to every case below unless a case notes a deviation.</p>' +
+    envHtml;
+}
+
+let currentFilter = { search: "", verdict: "", tag: "" };
+let howtoCounter = 0;
+
+function labMatchesFilter(lab) {
+  const v = currentFilter.verdict;
+  const t = currentFilter.tag;
+  const q = currentFilter.search.trim().toLowerCase();
+
+  if (v && lab.verdict !== v) return false;
+  if (t && !(lab.tags || []).includes(t)) return false;
+
+  if (q) {
+    const haystack = [
+      lab.title, lab.summary, lab.conclusion, lab.environmentNote,
+      ...(lab.tags || []),
+      ...(lab.iocs || []),
+      ...((defaultEnvironment && defaultEnvironment.tools) || []),
+      (lab.sample && lab.sample.md5) || "",
+      (lab.sample && lab.sample.sha1) || "",
+      (lab.sample && lab.sample.sha256) || "",
+      (lab.sample && lab.sample.imphash) || "",
+      ...((lab.mitre || []).map(function (m) { return m.id + " " + m.name; }))
+    ].join(" ").toLowerCase();
+    if (!haystack.includes(q)) return false;
+  }
+  return true;
+}
+
+function populateTagFilter() {
+  const select = document.getElementById("tag-filter");
+  const allTags = new Set();
+  labs.forEach(function (lab) { (lab.tags || []).forEach(function (t) { allTags.add(t); }); });
+  Array.from(allTags).sort().forEach(function (t) {
+    const opt = document.createElement("option");
+    opt.value = t;
+    opt.textContent = t;
+    select.appendChild(opt);
+  });
+}
+
+function stepHtml(s, i, labVerdict) {
+  const detailHtml = (s.detail && s.detail.length) ?
+    '<ul class="step-detail-list">' + s.detail.map(function (d) { return '<li>' + esc(d) + '</li>'; }).join("") + '</ul>' : '';
+
+  const howToHtml = (s.howTo && s.howTo.length) ?
+    (function () {
+      howtoCounter += 1;
+      const panels = s.howTo.map(function (h, hi) {
+        return '<div class="howto-panel"' + (hi === 0 ? '' : ' hidden') + ' data-index="' + hi + '">' +
+          '<h5>' + esc(h.title) + '</h5><p>' + esc(h.description) + '</p></div>';
+      }).join("");
+      const pills = s.howTo.map(function (h, hi) {
+        return '<button type="button" class="howto-pill' + (hi === 0 ? ' active' : '') + '" data-index="' + hi + '">' + (hi + 1) + '</button>';
+      }).join("");
+      return '<div class="howto-callout" data-howto-id="howto-' + howtoCounter + '" data-count="' + s.howTo.length + '">' +
+        '<div class="howto-panels">' + panels + '</div>' +
+        '<div class="howto-controls">' +
+          '<div class="howto-pills">' + pills + '</div>' +
+          '<div class="howto-nav">' +
+            '<button type="button" class="howto-btn howto-back" disabled>Back</button>' +
+            '<button type="button" class="howto-btn howto-next"' + (s.howTo.length <= 1 ? ' disabled' : '') + '>Next</button>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
+    })() : '';
+
+  const commandsHtml = (s.commands && s.commands.length) ?
+    '<div class="code-block-wrap">' +
+      '<div class="code-block-label">Run</div>' +
+      '<div class="code-block">' + s.commands.map(esc).join("\n") + '<button class="copy-btn" data-copy>Copy</button></div>' +
+    '</div>' : '';
+
+  const expectedHtml = s.expectedOutput ?
+    '<div class="code-block-wrap">' +
+      '<div class="code-block-label">Expected output / behaviour</div>' +
+      '<div class="code-block output-block">' + esc(s.expectedOutput) + '<button class="copy-btn" data-copy>Copy</button></div>' +
+    '</div>' : '';
+
+  const findingsHtml = (s.findings && s.findings.length) ?
+    '<div class="findings-row">' +
+      s.findings.map(function (f) {
+        const type = (f.type || "other").toLowerCase();
+        const hasNote = !!f.note;
+        return '<span class="finding-chip' + (hasNote ? ' has-note' : '') + '"' + (hasNote ? ' title="' + esc(f.note) + '"' : '') + '>' +
+          '<span class="finding-type-tag ' + esc(type) + '">' + esc(f.type || "other") + '</span>' +
+          '<span class="finding-value">' + esc(f.value) + '</span>' +
+        '</span>';
+      }).join("") +
+    '</div>' : '';
+
+  const warningHtml = s.warning ?
+    '<div class="step-warning">⚠️ <span>' + esc(s.warning) + '</span></div>' : '';
+
+  const artifactsHtml = (s.artifacts && s.artifacts.length) ?
+    '<p class="step-artifacts"><strong>Save as you go:</strong> ' + s.artifacts.map(esc).join("; ") + '</p>' : '';
+
+  const isVerdict = s.phase === "Verdict";
+  const verdictClass = isVerdict ? "verdict-" + (labVerdict || "neutral") : "";
+
+  if (isVerdict) {
+    return '<li class="step-item verdict-item ' + verdictClass + '">' +
+      '<span class="step-num verdict-num"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 12.5 9.5 18 20 6"></polyline></svg></span>' +
+      '<div class="step-text">' +
+        '<div class="step-text-head"><h4>' + esc(s.title) + '</h4></div>' +
+        detailHtml +
+        howToHtml +
+        commandsHtml +
+        expectedHtml +
+        findingsHtml +
+        warningHtml +
+        (s.observation ? '<p class="observation-label">Verdict reasoning</p><ul class="observation-list">' +
+          (Array.isArray(s.observation) ? s.observation : [s.observation]).map(function (o) { return '<li>' + formatInline(o) + '</li>'; }).join("") +
+        '</ul>' : '') +
+        artifactsHtml +
+      '</div>' +
+    '</li>';
+  }
+
+  return '<li class="step-item">' +
+    '<span class="step-num">' + (i + 1) + '</span>' +
+    '<div class="step-text">' +
+      '<div class="step-text-head"><h4>' + esc(s.title) + '</h4>' + (s.phase ? '<span class="chip neutral">' + esc(s.phase) + '</span>' : '') + '</div>' +
+      detailHtml +
+      howToHtml +
+      commandsHtml +
+      expectedHtml +
+      findingsHtml +
+      warningHtml +
+      (s.observation ? '<p class="observation-label">Observed</p><ul class="observation-list">' +
+        (Array.isArray(s.observation) ? s.observation : [s.observation]).map(function (o) { return '<li>' + formatInline(o) + '</li>'; }).join("") +
+      '</ul>' : '') +
+      artifactsHtml +
+    '</div>' +
+  '</li>';
+}
+
+function renderLabs() {
+  const list = document.getElementById("lab-list");
+  const countEl = document.getElementById("result-count");
+  const hashTarget = (location.hash || "").replace("#", "");
+  howtoCounter = 0;
+
+  const visible = labs.filter(labMatchesFilter);
+  countEl.textContent = visible.length + " / " + labs.length + " case file" + (labs.length === 1 ? "" : "s");
+
+  if (!labs.length) {
+    list.innerHTML = '<p class="lab-empty">No case files yet — add your first analysis to the "labs" array near the bottom of this page.</p>';
+    return;
+  }
+  if (!visible.length) {
+    list.innerHTML = '<p class="lab-empty">No case files match your search/filters.</p>';
+    return;
+  }
+
+  list.innerHTML = visible.map(function (lab, idx) {
+    const slug = lab.id || slugify(lab.title, idx);
+    const sample = lab.sample || {};
+
+    const tagChips = (lab.tags || []).map(function (t) {
+      return '<span class="chip neutral tag-btn" data-tag="' + esc(t) + '">' + esc(t) + '</span>';
+    }).join("");
+
+    const diffDurChips =
+      (lab.difficulty ? '<span class="chip sage">' + esc(lab.difficulty) + '</span>' : '') +
+      (lab.duration ? '<span class="chip neutral">' + esc(lab.duration) + '</span>' : '');
+
+    const metaGrid = [
+      metaRow("File type", sample.fileType),
+      metaRow("File size", sample.fileSize),
+      metaRow("Delivery", sample.deliveryVector),
+      metaRow("Acquisition", sample.acquisitionNotes),
+      metaRow("MD5", sample.md5),
+      metaRow("SHA-1", sample.sha1),
+      metaRow("SHA-256", sample.sha256),
+      metaRow("Imphash", sample.imphash)
+    ].join("");
+
+    const prereqHtml = (lab.prerequisites && lab.prerequisites.length) ?
+      '<div class="section-label">Prerequisites</div><ul class="prereq-list">' +
+        lab.prerequisites.map(function (p) { return '<li>' + esc(p) + '</li>'; }).join("") +
+      '</ul>' : '';
+
+    const stepsHtml = (lab.steps || []).map(function (s, si) { return stepHtml(s, si, lab.verdict); }).join("");
+
+    const mitreHtml = (lab.mitre && lab.mitre.length) ?
+      '<div class="mitre-list">' + lab.mitre.map(function (m) {
+        return '<span class="chip mitre mono">' + esc(m.id) + ' — ' + esc(m.name) + '</span>';
+      }).join("") + '</div>' : '';
+
+    const iocsHtml = (lab.iocs && lab.iocs.length) ? '<div class="ioc-box">' + lab.iocs.map(esc).join("<br>") + '</div>' : '';
+
+    const refsHtml = (lab.references && lab.references.length) ?
+      '<div class="section-label">References</div><ul class="ref-list">' +
+        lab.references.map(function (r) {
+          return '<li><a href="' + esc(r.url) + '" target="_blank" rel="noopener noreferrer">' + esc(r.label) + '</a></li>';
+        }).join("") +
+      '</ul>' : '';
+
+    const safetyHtml = lab.safetyNotes ?
+      '<div class="safety-banner"><span class="icon">🛡️</span><span>' + esc(lab.safetyNotes) + '</span></div>' : '';
+
+    const envNoteHtml = lab.environmentNote ?
+      '<div class="env-note-banner">🔧&nbsp;<span><strong>Differs from default setup:</strong> ' + esc(lab.environmentNote) + '</span></div>' : '';
+
+    const isTarget = hashTarget && hashTarget === slug;
+
+    return '<details class="lab-card' + (isTarget ? ' is-target' : '') + '" id="' + esc(slug) + '"' + (isTarget ? ' open' : '') + '>' +
+      '<summary>' +
+        '<div class="lab-top"><h3 class="lab-title">' + esc(lab.title) + '</h3>' +
+          '<div class="lab-date-col"><span class="lab-date">' + esc(lab.date) + '</span></div>' +
+        '</div>' +
+        '<div><span class="chip ' + chipClassForVerdict(lab.verdict) + '">' + esc(lab.verdict) + '</span>' + diffDurChips + tagChips + '</div>' +
+        '<p class="lab-summary">' + esc(lab.summary) + '</p>' +
+      '</summary>' +
+      '<div class="lab-body">' +
+        safetyHtml +
+        envNoteHtml +
+        (metaGrid ? '<div class="section-label">Sample</div><div class="meta-grid">' + metaGrid + '</div>' : '') +
+        prereqHtml +
+        (stepsHtml ? '<div class="section-label">Step-by-step walk-through</div><ol class="step-list">' + stepsHtml + '</ol>' : '') +
+        (mitreHtml ? '<div class="section-label">MITRE ATT&amp;CK mapping</div>' + mitreHtml : '') +
+        (iocsHtml ? '<div class="section-label">Indicators of compromise</div>' + iocsHtml : '') +
+        (lab.conclusion ? '<div class="section-label">Recommendations</div><div class="conclusion-box">' + esc(lab.conclusion) + '</div>' : '') +
+        refsHtml +
+      '</div>' +
+    '</details>';
+  }).join("");
+
+  if (hashTarget) {
+    const el = document.getElementById(hashTarget);
+    if (el) setTimeout(function () { el.scrollIntoView({ block: "start" }); }, 30);
+  }
+}
+
+function attachControlListeners() {
+  document.getElementById("search-input").addEventListener("input", function (e) {
+    currentFilter.search = e.target.value;
+    renderLabs();
+  });
+  document.getElementById("verdict-filter").addEventListener("change", function (e) {
+    currentFilter.verdict = e.target.value;
+    renderLabs();
+  });
+  document.getElementById("tag-filter").addEventListener("change", function (e) {
+    currentFilter.tag = e.target.value;
+    renderLabs();
+  });
+}
+
+// Delegated click handling for tag chips and copy buttons (content is re-rendered often)
+document.addEventListener("click", function (e) {
+  const tagBtn = e.target.closest("[data-tag]");
+  if (tagBtn) {
+    const tag = tagBtn.getAttribute("data-tag");
+    currentFilter.tag = tag;
+    document.getElementById("tag-filter").value = tag;
+    renderLabs();
+    return;
+  }
+  const copyBtn = e.target.closest("[data-copy]");
+  if (copyBtn) {
+    const block = copyBtn.closest(".code-block");
+    const text = block.textContent.replace(/Copy$/, "").trim();
+    navigator.clipboard.writeText(text).then(function () {
+      const original = copyBtn.textContent;
+      copyBtn.textContent = "Copied!";
+      copyBtn.classList.add("copied");
+      setTimeout(function () {
+        copyBtn.textContent = original;
+        copyBtn.classList.remove("copied");
+      }, 1400);
+    });
+    return;
+  }
+
+  const howtoCallout = e.target.closest(".howto-callout");
+  if (howtoCallout) {
+    const count = parseInt(howtoCallout.getAttribute("data-count"), 10) || 1;
+    const activePanel = howtoCallout.querySelector(".howto-panel:not([hidden])");
+    let idx = activePanel ? parseInt(activePanel.getAttribute("data-index"), 10) : 0;
+
+    const pillBtn = e.target.closest(".howto-pill");
+    const backBtn = e.target.closest(".howto-back");
+    const nextBtn = e.target.closest(".howto-next");
+
+    if (pillBtn) {
+      idx = parseInt(pillBtn.getAttribute("data-index"), 10);
+    } else if (backBtn && !backBtn.disabled) {
+      idx = Math.max(0, idx - 1);
+    } else if (nextBtn && !nextBtn.disabled) {
+      idx = Math.min(count - 1, idx + 1);
+    } else {
+      return;
+    }
+
+    howtoCallout.querySelectorAll(".howto-panel").forEach(function (p) {
+      p.hidden = parseInt(p.getAttribute("data-index"), 10) !== idx;
+    });
+    howtoCallout.querySelectorAll(".howto-pill").forEach(function (p) {
+      p.classList.toggle("active", parseInt(p.getAttribute("data-index"), 10) === idx);
+    });
+    howtoCallout.querySelector(".howto-back").disabled = (idx === 0);
+    howtoCallout.querySelector(".howto-next").disabled = (idx === count - 1);
+  }
+});
+
+renderDefaultEnvironment();
+populateTagFilter();
+attachControlListeners();
+renderLabs();
+</script>
+
+</body>
+</html><!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Lab Notebook — Malware Analysis Cottage</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@500;600;700&family=Nunito:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --cream: #fdf3f7;
+    --cream-2: #f9e4ef;
+    --brown: #532b45;
+    --brown-soft: #855b78;
+    --pink: #f0bfe0;
+    --pink-deep: #b8298f;
+    --sage: #d1b6dd;
+    --sage-deep: #8a4fa0;
+    --butter: #f6d9ab;
+    --butter-deep: #c9944a;
+    --card: #fffafc;
+    --shadow: 0 6px 18px rgba(83, 43, 69, 0.09);
+    --danger: #d97a6b;
+    --danger-bg: #fbe2dc;
+  }
+
+  * { box-sizing: border-box; }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    margin: 0;
+    font-family: 'Nunito', sans-serif;
+    background: var(--cream);
+    color: var(--brown);
+    line-height: 1.7;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+  }
+
+  h1, h2, h3, .brand {
+    font-family: 'Quicksand', sans-serif;
+    font-weight: 700;
+  }
+
+  a { color: var(--sage-deep); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  .wrap { max-width: 920px; margin: 0 auto; padding: 0 24px; }
+
+  nav {
+    position: sticky;
+    top: 0;
+    background: rgba(253, 243, 247, 0.92);
+    backdrop-filter: blur(6px);
+    border-bottom: 1px solid rgba(83,43,69,0.08);
+    z-index: 10;
+  }
+  nav .wrap {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 24px;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  .brand { font-size: 20px; color: var(--brown); }
+  .brand span { color: var(--pink-deep); }
+  .back-link {
+    background: var(--card);
+    border: 1px solid rgba(83,43,69,0.1);
+    border-radius: 999px;
+    padding: 7px 16px;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--brown-soft);
+  }
+  .back-link:hover { background: var(--pink); color: var(--brown); text-decoration: none; }
+
+  header.hero { text-align: center; padding: 56px 24px 36px; }
+  header.hero h1 { font-size: 32px; margin: 0 0 10px; }
+  header.hero p { font-size: 16px; color: var(--brown-soft); max-width: 560px; margin: 0 auto; }
+
+  section { padding: 8px 24px 40px; }
+
+  /* ---------- shared lab environment block ---------- */
+  .env-section {
+    background: var(--card);
+    border-radius: 18px;
+    box-shadow: var(--shadow);
+    border: 1px solid rgba(83,43,69,0.06);
+    padding: 20px 24px;
+    margin-bottom: 22px;
+  }
+  .env-section h2 {
+    margin: 0 0 4px;
+    font-size: 16px;
+  }
+  .env-section .env-sub {
+    margin: 0 0 14px;
+    font-size: 13px;
+    color: var(--brown-soft);
+  }
+
+  /* ---------- filter / search bar ---------- */
+  .controls {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    align-items: center;
+    margin-bottom: 22px;
+    background: var(--card);
+    border-radius: 16px;
+    padding: 14px 16px;
+    box-shadow: var(--shadow);
+    border: 1px solid rgba(83,43,69,0.06);
+  }
+  .controls input[type="text"] {
+    flex: 1 1 200px;
+    min-width: 140px;
+    font-family: 'Nunito', sans-serif;
+    font-size: 14px;
+    padding: 9px 14px;
+    border-radius: 999px;
+    border: 1px solid rgba(83,43,69,0.15);
+    background: var(--cream);
+    color: var(--brown);
+  }
+  .controls select {
+    font-family: 'Nunito', sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    padding: 8px 12px;
+    border-radius: 999px;
+    border: 1px solid rgba(83,43,69,0.15);
+    background: var(--cream);
+    color: var(--brown-soft);
+  }
+  .controls .result-count { font-size: 12.5px; color: var(--brown-soft); white-space: nowrap; }
+
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    font-size: 12px;
+    font-weight: 700;
+    padding: 4px 11px;
+    border-radius: 999px;
+    margin: 2px 4px 2px 0;
+  }
+  .chip.pink { background: var(--pink); color: var(--pink-deep); }
+  .chip.sage { background: var(--sage); color: var(--sage-deep); }
+  .chip.butter { background: var(--butter); color: var(--butter-deep); }
+  .chip.neutral { background: var(--cream-2); color: var(--brown-soft); font-weight: 600; }
+  .chip.mono { font-family: monospace; font-weight: 600; }
+  .chip.tag-btn { cursor: pointer; border: none; }
+
+  details.lab-card {
+    background: var(--card);
+    border-radius: 18px;
+    box-shadow: var(--shadow);
+    border: 1px solid rgba(83,43,69,0.06);
+    margin-bottom: 18px;
+    overflow: hidden;
+    scroll-margin-top: 84px;
+  }
+  details.lab-card.is-target { border-color: var(--sage-deep); box-shadow: 0 0 0 2px var(--sage-deep), var(--shadow); }
+  details.lab-card summary {
+    cursor: pointer;
+    list-style: none;
+    padding: 20px 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    position: relative;
+  }
+  details.lab-card summary::-webkit-details-marker { display: none; }
+  details.lab-card summary::after {
+    content: "+";
+    position: absolute;
+    top: 16px;
+    right: 20px;
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    background: color-mix(in srgb, var(--pink) 45%, #fff);
+    color: var(--pink-deep);
+    font-size: 18px;
+    font-weight: 700;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  details.lab-card[open] summary::after { content: "–"; }
+  .lab-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 30px; padding-right: 52px; }
+  .lab-title { margin: 0; font-size: 18px; padding-right: 20px; }
+  .lab-date-col { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; flex-shrink: 0; }
+  .lab-date { font-size: 12px; color: var(--brown-soft); white-space: nowrap; }
+  .lab-summary { margin: 0; font-size: 14px; color: var(--brown-soft); }
+  .lab-body { padding: 0 24px 26px; }
+
+  .section-label {
+    font-family: 'Quicksand', sans-serif;
+    font-weight: 700;
+    font-size: 13px;
+    color: var(--brown-soft);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin: 22px 0 10px;
+  }
+  .section-label:first-child { margin-top: 4px; }
+
+  .safety-banner {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    background: var(--danger-bg);
+    color: #8a4436;
+    border-radius: 12px;
+    padding: 12px 16px;
+    font-size: 13.5px;
+    margin: 4px 0 18px;
+  }
+  .safety-banner .icon { flex-shrink: 0; }
+
+  .env-note-banner {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    background: var(--cream-2);
+    color: var(--brown-soft);
+    border-radius: 12px;
+    padding: 10px 16px;
+    font-size: 13px;
+    margin: 4px 0 18px;
+    border: 1px dashed var(--sage-deep);
+  }
+
+  .meta-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px 20px;
+    font-size: 13px;
+    color: var(--brown-soft);
+  }
+  .meta-grid div { word-break: break-all; }
+  .meta-grid strong { color: var(--brown); font-weight: 700; }
+  @media (max-width: 640px) { .meta-grid { grid-template-columns: 1fr; } }
+
+  .prereq-list, .ref-list {
+    margin: 0;
+    padding-left: 20px;
+    font-size: 13.5px;
+    color: var(--brown-soft);
+  }
+  .prereq-list li, .ref-list li { margin-bottom: 4px; }
+
+  .env-box {
+    background: var(--cream-2);
+    border-radius: 14px;
+    padding: 14px 18px;
+    border: 1px dashed var(--sage-deep);
+    font-size: 13px;
+    color: var(--brown-soft);
+  }
+  .env-box .env-row { margin-bottom: 6px; }
+  .env-box .env-row:last-child { margin-bottom: 0; }
+  .env-box strong { color: var(--brown); }
+
+  .step-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 16px; }
+  .step-item { display: flex; gap: 14px; align-items: flex-start; }
+  .step-num {
+    flex-shrink: 0;
+    width: 28px; height: 28px;
+    border-radius: 50%;
+    background: var(--sage);
+    color: var(--sage-deep);
+    font-weight: 700;
+    font-size: 13px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-top: 2px;
+  }
+  .verdict-item {
+    margin-top: 4px;
+    padding: 16px;
+    border-radius: 14px;
+    background: var(--cream-2);
+  }
+  .verdict-item .step-num.verdict-num {
+    background: transparent;
+    width: 28px; height: 28px;
+  }
+  .verdict-item .step-text h4 {
+    font-family: 'Quicksand', sans-serif;
+    font-size: 16px;
+  }
+  .verdict-item .observation-label { font-size: 13px; }
+  .verdict-item.verdict-malicious { background: var(--danger-bg); box-shadow: inset 0 0 0 1px var(--danger); }
+  .verdict-item.verdict-malicious .observation-label,
+  .verdict-item.verdict-malicious .step-text h4,
+  .verdict-item.verdict-malicious .verdict-num { color: var(--danger); }
+  .verdict-item.verdict-suspicious { background: var(--butter); box-shadow: inset 0 0 0 1px var(--butter-deep); }
+  .verdict-item.verdict-suspicious .observation-label,
+  .verdict-item.verdict-suspicious .step-text h4,
+  .verdict-item.verdict-suspicious .verdict-num { color: var(--butter-deep); }
+  .verdict-item.verdict-benign { background: var(--sage); box-shadow: inset 0 0 0 1px var(--sage-deep); }
+  .verdict-item.verdict-benign .observation-label,
+  .verdict-item.verdict-benign .step-text h4,
+  .verdict-item.verdict-benign .verdict-num { color: var(--sage-deep); }
+  .verdict-item .observation-list { color: var(--brown); }
+  .step-text { flex: 1; min-width: 0; }
+  .step-text-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 4px; }
+  .step-text h4 { margin: 0; font-size: 14.5px; }
+  .step-text p { margin: 0 0 4px; font-size: 14px; color: var(--brown-soft); }
+  .step-text p.observation-label { font-weight: 700; color: var(--brown); font-size: 12.5px; margin: 8px 0 2px; }
+  .observation-list { margin: 0 0 4px; padding-left: 18px; font-size: 14px; color: var(--brown-soft); }
+  .observation-list li { margin-bottom: 3px; }
+  .inline-code {
+    font-family: monospace;
+    font-size: 0.92em;
+    background: var(--cream-2);
+    color: var(--brown);
+    padding: 1px 5px;
+    border-radius: 4px;
+    word-break: break-all;
+  }
+  .step-detail-list { margin: 4px 0 8px; padding-left: 18px; font-size: 13.5px; color: var(--brown-soft); }
+  .step-detail-list li { margin-bottom: 3px; }
+
+  .howto-callout {
+    background: var(--cream-2);
+    border: 1px solid rgba(83,43,69,0.1);
+    border-radius: 16px;
+    padding: 18px 20px;
+    margin: 10px 0;
+    color: var(--brown);
+  }
+  .howto-panel h5 { margin: 0 0 8px; font-size: 15.5px; color: var(--brown); font-family: 'Quicksand', sans-serif; font-weight: 700; }
+  .howto-panel p { margin: 0; font-size: 13.5px; line-height: 1.6; color: var(--brown-soft); }
+  .howto-controls {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-top: 16px;
+  }
+  .howto-pills { display: flex; flex-wrap: wrap; gap: 6px; }
+  .howto-pill {
+    width: 26px; height: 26px;
+    border-radius: 50%;
+    border: none;
+    background: var(--card);
+    color: var(--brown-soft);
+    font-family: 'Nunito', sans-serif;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: inset 0 0 0 1px rgba(83,43,69,0.12);
+  }
+  .howto-pill:hover { background: var(--pink); color: var(--pink-deep); }
+  .howto-pill.active { background: var(--pink-deep); color: #fff; box-shadow: none; }
+  .howto-nav { display: flex; gap: 8px; }
+  .howto-btn {
+    font-family: 'Nunito', sans-serif;
+    font-size: 12.5px;
+    font-weight: 700;
+    padding: 7px 14px;
+    border-radius: 999px;
+    border: none;
+    cursor: pointer;
+  }
+  .howto-btn.howto-back { background: var(--card); color: var(--brown-soft); box-shadow: inset 0 0 0 1px rgba(83,43,69,0.12); }
+  .howto-btn.howto-back:hover:not(:disabled) { background: var(--cream); }
+  .howto-btn.howto-back:disabled { opacity: 0.4; cursor: default; }
+  .howto-btn.howto-next { background: var(--pink-deep); color: #fff; }
+  .howto-btn.howto-next:hover:not(:disabled) { background: var(--sage-deep); }
+  .howto-btn.howto-next:disabled { opacity: 0.4; cursor: default; }
+  .step-warning {
+    display: flex;
+    gap: 8px;
+    background: var(--danger-bg);
+    color: #8a4436;
+    border-radius: 8px;
+    padding: 8px 12px;
+    font-size: 13px;
+    margin: 6px 0;
+  }
+  .step-artifacts {
+    font-size: 12.5px;
+    color: var(--brown-soft);
+    margin: 4px 0 0;
+  }
+  .step-artifacts strong { color: var(--brown); }
+
+  .findings-row { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+  .finding-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    padding: 4px 10px 4px 4px;
+    border-radius: 999px;
+    background: var(--cream-2);
+    cursor: default;
+  }
+  .finding-chip .finding-type-tag {
+    font-family: 'Quicksand', sans-serif;
+    font-weight: 700;
+    font-size: 9.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    padding: 2px 7px;
+    border-radius: 999px;
+  }
+  .finding-chip .finding-value {
+    font-family: monospace;
+    font-size: 12px;
+    color: var(--brown);
+    word-break: break-all;
+  }
+  .finding-chip.has-note { border-bottom: 1px dashed var(--brown-soft); }
+  .finding-type-tag.import { background: var(--pink); color: var(--pink-deep); }
+  .finding-type-tag.string { background: var(--butter); color: var(--butter-deep); }
+  .finding-type-tag.url { background: var(--sage); color: var(--sage-deep); }
+  .finding-type-tag.file { background: #e5ddd3; color: var(--brown-soft); }
+  .finding-type-tag.registry { background: #e5ddd3; color: var(--brown-soft); }
+  .finding-type-tag.mutex { background: #e5ddd3; color: var(--brown-soft); }
+  .finding-type-tag.other { background: #e5ddd3; color: var(--brown-soft); }
+
+  .code-block-wrap { position: relative; margin: 6px 0 8px; }
+  .code-block-label {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--brown-soft);
+    margin-bottom: 3px;
+  }
+  .code-block {
+    background: #2f2a25;
+    color: #f3dfa3;
+    font-family: monospace;
+    font-size: 12.5px;
+    padding: 10px 14px;
+    padding-right: 62px;
+    border-radius: 10px;
+    overflow-x: auto;
+    white-space: pre;
+    line-height: 1.5;
+  }
+  .code-block.output-block { color: #cfe8c8; background: #262b26; }
+  .copy-btn {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    background: var(--butter);
+    color: #4a3a1f;
+    border: 1px solid rgba(0,0,0,0.1);
+    border-radius: 6px;
+    font-size: 11px;
+    font-family: 'Nunito', sans-serif;
+    font-weight: 700;
+    padding: 3px 8px;
+    cursor: pointer;
+  }
+  .copy-btn:hover { background: var(--butter-deep); color: #fff; }
+  .copy-btn.copied { background: var(--sage-deep); color: #fff; border-color: var(--sage-deep); }
+
+  .mitre-list { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip.mitre { background: var(--pink); color: var(--pink-deep); }
+
+  .ioc-box {
+    background: var(--cream-2);
+    border-radius: 10px;
+    padding: 10px 14px;
+    font-family: monospace;
+    font-size: 12.5px;
+    color: var(--brown-soft);
+    word-break: break-all;
+    line-height: 1.6;
+  }
+
+  .conclusion-box {
+    background: var(--cream-2);
+    border-radius: 14px;
+    padding: 14px 18px;
+    border-left: 4px solid var(--butter-deep);
+    border-radius: 0 14px 14px 0;
+    font-size: 14px;
+    color: var(--brown-soft);
+  }
+
+  .lab-empty { color: var(--brown-soft); font-size: 14px; text-align: center; padding: 30px 0; }
+
+  footer {
+    text-align: center;
+    padding: 40px 24px 56px;
+    color: var(--brown-soft);
+    font-size: 14px;
+  }
+  footer .heart { color: var(--pink-deep); }
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="wrap">
+    <div class="brand">the malware analysis <span>cottage</span></div>
+    <a class="back-link" href="index.html">← back to the cottage</a>
+  </div>
+</nav>
+
+<header class="hero">
+  <div class="wrap">
+    <h1>🧪 The lab notebook</h1>
+    <p>Detailed, replicable case files from samples analysed in my own isolated virtual machines — exact steps and what to expect at each one.</p>
+  </div>
+</header>
+
+<section id="labs">
+  <div class="wrap">
+    <div class="env-section" id="env-section">
+      <!-- filled in by renderDefaultEnvironment() -->
+    </div>
+
+    <div class="safety-banner" id="global-safety-banner">
+      <span class="icon">🛡️</span>
+      <span>Every sample on this page was detonated only inside an isolated, snapshotted VM with no direct internet access — network calls were answered by FakeNET, never the real internet. The VM was reverted to a clean snapshot before and after each run.</span>
+    </div>
+
+    <div class="controls">
+      <input type="text" id="search-input" placeholder="Search title, tags, IOCs, tools, hashes…">
+      <select id="verdict-filter">
+        <option value="">All verdicts</option>
+        <option value="malicious">Malicious</option>
+        <option value="suspicious">Suspicious</option>
+        <option value="benign">Benign</option>
+      </select>
+      <select id="tag-filter">
+        <option value="">All tags</option>
+      </select>
+      <span class="result-count" id="result-count"></span>
+    </div>
+    <div id="lab-list"></div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    made with <span class="heart">♥</span> for curious analysts everywhere — stay cosy, stay careful
+  </div>
+</footer>
+
+<script>
+/*
+  HOW TO ADD A NEW CASE FILE
+  --------------------------
+  Copy one of the objects in the "labs" array below (everything between
+  the outer { and the matching }), paste it above "];", and fill in your
+  own details. New entries show up at the top if you paste them first.
+
+  The goal of this template is REPLICABILITY — someone with the same
+  sample and a similar VM setup should be able to follow your steps,
+  know exactly what output to expect, and land on the same conclusion.
+  Every field below is optional except title/date/verdict/summary/steps —
+  fill in as much as you have; empty fields are simply omitted from the
+  rendered card.
+
+  NOTE ON ENVIRONMENT: your lab setup usually doesn't change between
+  cases, so it's no longer repeated on every card. Edit the single
+  "defaultEnvironment" object below once and it applies to every case.
+  If a specific case used something different (a different VM, an extra
+  tool, no INetSim, etc), set that case's optional "environmentNote" —
+  a short plain-text string — and it'll show as a small callout on just
+  that card instead of duplicating the whole environment block.
+
+  Top-level fields:
+    id          - optional url-safe slug for deep-linking (e.g. "case-002").
+                  If omitted, one is auto-generated from the title.
+    title       - short case name, e.g. "Case #003: The fake invoice"
+    date        - any text, e.g. "12 Aug 2026"
+    verdict     - one of: "malicious", "suspicious", "benign"
+    difficulty  - optional, one of: "beginner", "intermediate", "advanced"
+    duration    - optional estimate, e.g. "~45 minutes"
+    tags        - short labels, e.g. ["Windows", "PE32", "dropper"]
+    summary     - one or two sentences shown before you expand the card
+    safetyNotes - optional. Use only for something UNUSUAL about this
+                  specific case beyond the general safety practice
+                  already stated in the banner at the top of the page
+                  (e.g. "this sample beacons out within seconds — confirm
+                  INetSim is up before double-clicking"). Rendered as a
+                  highlighted banner at the top of the expanded card.
+    environmentNote - optional short string for when THIS case deviated
+                  from defaultEnvironment (see note above)
+    prerequisites - optional array of strings: things you need before
+                  starting (tool installs, sample acquisition, VM image).
+    references  - optional array of { label, url } — write-ups, vendor
+                  reports, or tool docs you used or would point others to.
+
+  sample - metadata about the file itself:
+    fileType         - e.g. "PE32 executable (Windows)"
+    fileSize         - e.g. "184 KB"
+    md5, sha1, sha256 - hashes (leave "" if you don't have one)
+    imphash          - import hash (leave "" if you don't have one).
+                  Useful for clustering samples that share the same
+                  import table even when their file hashes differ —
+                  e.g. across repacked or minimally-patched variants.
+    deliveryVector   - how you obtained/received it, e.g. "email attachment"
+    acquisitionNotes - optional: where/how a replicator could get an
+                  equivalent sample, without hosting the file yourself
+
+  steps - an ordered array of step objects:
+    phase       - a short stage label, e.g. "Triage", "Static analysis",
+                  "Dynamic analysis", "Verdict"
+    title       - what this step is, e.g. "Check imports and strings"
+    detail      - optional array of extra bullet points/sub-steps that
+                  add granularity beyond the one-line title
+    howTo       - optional array for a full numbered walkthrough of a
+                  specific tool/technique within this step — more
+                  substantial than "detail" (which is short one-liners).
+                  Each entry is { title: "short imperative title",
+                  description: "a sentence or two of instruction" }.
+                  Renders as a numbered mini-guide under the step. Use
+                  this when a step deserves its own how-to (e.g. "here's
+                  exactly how to set up Procmon filters for triage")
+                  rather than just narrating what you did.
+    commands    - array of exact commands/actions run (optional, use []
+                  if the step was manual/GUI-only) — this is what makes
+                  the step replicable
+    expectedOutput - optional string: the literal (or representative)
+                  output/behaviour a replicator should see after running
+                  the commands, shown in its own block
+    findings    - optional array for when a step turns up MULTIPLE
+                  discrete suspicious items (imports, strings, URLs,
+                  registry keys, mutexes, etc) that don't belong crammed
+                  into one observation paragraph. Each entry is:
+                    { type: "import" | "string" | "url" | "file" |
+                             "registry" | "mutex" | "other",
+                      value: "the exact string/import/path/etc",
+                      note: "optional one-line why it matters" }
+                  Rendered as a row of small horizontal chips under the
+                  step (type tag + monospace value); hover a chip to see
+                  its note as a tooltip if one is given. Use this
+                  whenever there's more than one item — one-off findings
+                  can still just go in "observation".
+    warning     - optional caution specific to this step
+    artifacts   - optional array of strings noting what to save at this
+                  step (e.g. "screenshot of Process Monitor filter",
+                  "export pcap as case002-run1.pcapng")
+    observation - what you actually saw/found when you did this. Can be
+                  a single string, but for anything with more than one
+                  discrete finding, use an array of short strings —
+                  each one renders as its own bullet point, which reads
+                  much more easily than a run-on paragraph.
+
+  mitre - optional array of { id, name } ATT&CK technique mappings,
+          e.g. { id: "T1566.001", name: "Phishing: Spearphishing Attachment" }
+
+  iocs       - optional array of strings (hashes, IPs, domains — keep
+               network IOCs defanged, e.g. hxxp://, 185.203.xx.xx)
+  conclusion - closing notes: final verdict reasoning, remediation, what
+               you'd do differently next time.
+*/
+
+// Edit this once — it applies to every case below unless a case sets
+// its own "environmentNote" to flag a deviation.
+const defaultEnvironment = {
+  os: "Windows 10 22H2, isolated FlareVM environment, snapshot reverted before every run",
+  vmSpecs: "4 vCPU, 9.9GB RAM, 90GB thin-provisioned disk",
+  tools: ["HashMyFiles", "PEStudio 9.63", "Detect It Easy 3.09", "Process Monitor / System Informer (Sysinternals)", "Wireshark 4.2", "FakeNET 3.2"],
+  network: "Host-only network, no internet. FakeNET faked DNS and HTTP responses."
+};
+
+const labs = [
+  {
+    title: "Case #002: PandaBanker",
     date: "24 Aug 2026",
     verdict: "malicious",
     tags: ["Windows", "PE32", "Process Hijacking", "jp2launcher.exe", "Java application", "Ransomware"],
